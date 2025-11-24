@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BlackJack - Jeu</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="table" role="application" aria-label="Table de BlackJack">
+    <header>
+      <div>
+        <h1>
+          <span class="logo">21</span>
+          <span>BlackJack</span>
+        </h1>
+        <div class="pill-row">
+          <div class="pill" id="bankPill">
+            Crédits: <strong id="bank">100</strong>
+            <span id="bankDelta" class="bank-delta"></span>
+          </div>
+          <div class="pill">Mise en jeu: <strong id="currentBet">0</strong></div>
+        </div>
+      </div>
+      <div class="status">
+        Objectif: 21 • As = 1 ou 11 • Le croupier tire jusqu'à 17
+      </div>
+    </header>
+
+    <div class="board">
+      <main class="play-area">
+        <section>
+          <div class="player-row">
+            <div class="player-label">
+              <strong>Dealer</strong>
+              <span class="badge" id="dealerBadge">En attente</span>
+            </div>
+            <span id="dealerValue" class="status">0</span>
+          </div>
+          <div id="dealerHand" class="hand" aria-live="polite"></div>
+        </section>
+
+        <hr class="divider">
+
+        <section>
+          <div class="player-row">
+            <div class="player-label">
+              <strong>Joueur</strong>
+              <span class="badge green turn" id="playerBadge">À vous de jouer</span>
+            </div>
+            <span id="playerValue" class="status">0</span>
+          </div>
+          <div id="playerHands" class="player-hands" aria-live="polite"></div>
+        </section>
+
+        <div class="log" id="log" aria-live="polite"></div>
+      </main>
+
+      <aside class="controls">
+        <label for="bet">Mise de base (min 1)</label>
+        <input id="bet" type="number" min="1" value="10" />
+
+        <div class="chips">
+          <button class="chip" data-amount="5">
+            <span class="value">+5</span>
+            <span class="label">Petit</span>
+          </button>
+          <button class="chip" data-amount="10">
+            <span class="value">+10</span>
+            <span class="label">Standard</span>
+          </button>
+          <button class="chip" data-amount="25">
+            <span class="value">+25</span>
+            <span class="label">Gros</span>
+          </button>
+          <button class="chip" data-amount="-5">
+            <span class="value">-5</span>
+            <span class="label">Corriger</span>
+          </button>
+        </div>
+
+        <div class="controls-buttons">
+          <div class="controls-buttons-row">
+            <button id="dealBtn" class="btn">
+              Distribuer
+              <span class="kbd">D</span>
+            </button>
+          </div>
+
+          <div class="controls-buttons-row">
+            <button id="hitBtn" class="btn secondary" disabled>
+              Hit
+              <span class="kbd">H</span>
+            </button>
+            <button id="standBtn" class="btn secondary" disabled>
+              Stand
+              <span class="kbd">S</span>
+            </button>
+            <button id="doubleBtn" class="btn secondary" disabled>
+              Double
+            </button>
+            <button id="splitBtn" class="btn secondary" disabled>
+              Split
+            </button>
+          </div>
+
+          <div class="controls-buttons-row">
+            <button id="resetBtn" class="btn danger secondary">
+              Réinitialiser
+            </button>
+          </div>
+        </div>
+
+        <div class="history-title">
+          <strong>Historique</strong>
+          <small>Net par main</small>
+        </div>
+        <div id="history"></div>
+
+        <div class="kbd-hint">
+          Raccourcis clavier : <strong>D</strong> = Distribuer, <strong>H</strong> = Hit, <strong>S</strong> = Stand
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      Code simple, autonome<span class="dot"></span>ouvre juste ce fichier dans ton navigateur.
+    </footer>
+  </div>
+
+  <!-- 🎵 Sons (fichiers à mettre dans le même dossier) -->
+  <audio id="cardSound" src="card.mp3"></audio>
+  <audio id="winSound" src="win.mp3"></audio>
+  <audio id="loseSound" src="perdu.mp3"></audio>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

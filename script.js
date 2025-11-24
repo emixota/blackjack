@@ -1,0 +1,577 @@
+// BlackJack : split, double, multi-mains, UI, sons, animé
+(() => {
+  // DOM
+  const dealerHandEl   = document.getElementById('dealerHand');
+  const playerHandsEl  = document.getElementById('playerHands');
+  const dealerValueEl  = document.getElementById('dealerValue');
+  const playerValueEl  = document.getElementById('playerValue');
+  const dealerBadgeEl  = document.getElementById('dealerBadge');
+  const playerBadgeEl  = document.getElementById('playerBadge');
+
+  const dealBtn   = document.getElementById('dealBtn');
+  const hitBtn    = document.getElementById('hitBtn');
+  const standBtn  = document.getElementById('standBtn');
+  const doubleBtn = document.getElementById('doubleBtn');
+  const splitBtn  = document.getElementById('splitBtn');
+  const resetBtn  = document.getElementById('resetBtn');
+
+  const betInput      = document.getElementById('bet');
+  const bankEl        = document.getElementById('bank');
+  const currentBetEl  = document.getElementById('currentBet');
+  const logEl         = document.getElementById('log');
+  const historyEl     = document.getElementById('history');
+  const bankDeltaEl   = document.getElementById('bankDelta');
+
+  const chipButtons   = document.querySelectorAll('.chip');
+
+  // Sons
+  const cardSound = document.getElementById('cardSound');
+  const winSound  = document.getElementById('winSound');
+  const loseSound = document.getElementById('loseSound');
+
+  function playSound(audio) {
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  }
+
+  // État
+  let deck = [];
+  let dealer = [];
+  let playerHands = []; // [{cards:[], bet:number, finished:boolean, busted:boolean}]
+  let activeHandIndex = 0;
+
+  let bank = 100;
+  let baseBet = 0;
+  let currentBet = 0; // somme des mises posées sur la table
+  let inRound = false;
+  let dealerHidden = true;
+  let roundStartBank = bank;
+
+  function createDeck() {
+    const suits = ['♠','♥','♦','♣'];
+    const names = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    const d = [];
+    for (const s of suits) {
+      for (const n of names) {
+        d.push({ suit:s, rank:n });
+      }
+    }
+    return d;
+  }
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function cardToText(c) {
+    return `${c.rank}${c.suit}`;
+  }
+
+  function cardElement(c, hidden = false) {
+    const div = document.createElement('div');
+    div.className = 'card' + (hidden ? ' back' : '');
+    if (!hidden) {
+      div.textContent = cardToText(c);
+      div.dataset.rank = c.rank;
+      div.dataset.suit = c.suit;
+      if (c.suit === '♥' || c.suit === '♦') {
+        div.classList.add('red');
+      }
+    } else {
+      div.dataset.rank = '';
+      div.dataset.suit = '';
+    }
+    return div;
+  }
+
+  function handValue(hand) {
+    let total = 0;
+    let aces = 0;
+    for (const c of hand) {
+      if (c.rank === 'A') {
+        aces++; total += 11;
+      } else if (['J','Q','K'].includes(c.rank)) {
+        total += 10;
+      } else {
+        total += Number(c.rank);
+      }
+    }
+    while (total > 21 && aces > 0) {
+      total -= 10;
+      aces--;
+    }
+    return total;
+  }
+
+  function makeHand(cards, bet) {
+    return {
+      cards: cards.slice(),
+      bet,
+      finished: false,
+      busted: false,
+    };
+  }
+
+  function log(txt) {
+    const p = document.createElement('div');
+    p.textContent = txt;
+    logEl.prepend(p);
+  }
+
+  function updateHistory(txt) {
+    const el = document.createElement('div');
+    el.textContent = txt;
+    el.className = 'history-entry';
+    historyEl.prepend(el);
+  }
+
+  function showBankDelta(delta) {
+    if (!delta) {
+      bankDeltaEl.classList.remove('show','gain','loss');
+      bankDeltaEl.textContent = '';
+      return;
+    }
+    bankDeltaEl.classList.remove('show','gain','loss');
+    void bankDeltaEl.offsetWidth; // force reflow
+
+    bankDeltaEl.textContent = (delta > 0 ? '+' : '') + delta;
+    bankDeltaEl.classList.add(delta > 0 ? 'gain' : 'loss');
+    bankDeltaEl.classList.add('show');
+
+    setTimeout(() => {
+      bankDeltaEl.classList.remove('show');
+    }, 1200);
+  }
+
+  function updateBadges() {
+    if (!inRound) {
+      dealerBadgeEl.textContent = 'En attente';
+      dealerBadgeEl.className = 'badge';
+      playerBadgeEl.textContent = 'Cliquez sur Distribuer';
+      playerBadgeEl.className = 'badge green';
+      return;
+    }
+
+    const dealerTurn = activeHandIndex >= playerHands.length;
+    if (dealerTurn) {
+      dealerBadgeEl.textContent = 'Tour du dealer';
+      dealerBadgeEl.className = 'badge green turn';
+      playerBadgeEl.textContent = 'Attendez la résolution';
+      playerBadgeEl.className = 'badge';
+    } else {
+      dealerBadgeEl.textContent = 'En attente';
+      dealerBadgeEl.className = 'badge';
+      playerBadgeEl.textContent = 'Main ' + (activeHandIndex + 1);
+      playerBadgeEl.className = 'badge green turn';
+    }
+  }
+
+  function render() {
+    // Dealer
+    dealerHandEl.innerHTML = '';
+    dealer.forEach((c, i) => {
+      const hidden = dealerHidden && i === 0;
+      dealerHandEl.appendChild(cardElement(c, hidden));
+    });
+    dealerValueEl.textContent = dealer.length ? (dealerHidden ? '??' : handValue(dealer)) : 0;
+
+    // Player hands
+    playerHandsEl.innerHTML = '';
+    playerHands.forEach((hand, idx) => {
+      const row = document.createElement('div');
+      row.className = 'player-hand-row';
+      if (idx === activeHandIndex && inRound) {
+        row.classList.add('active');
+      }
+
+      const header = document.createElement('div');
+      header.className = 'hand-header';
+
+      const left = document.createElement('div');
+      left.className = 'hand-header-left';
+      const title = document.createElement('span');
+      title.textContent = 'Main ' + (idx + 1);
+      left.appendChild(title);
+
+      if (hand.finished) {
+        const tag = document.createElement('span');
+        tag.className = 'hand-tag';
+        if (hand.busted) {
+          tag.classList.add('bust');
+          tag.textContent = 'Bust';
+        } else {
+          tag.textContent = 'Terminé';
+        }
+        left.appendChild(tag);
+      }
+
+      header.appendChild(left);
+
+      const right = document.createElement('span');
+      right.textContent = `${handValue(hand.cards)} pts • Mise ${hand.bet}`;
+      header.appendChild(right);
+
+      row.appendChild(header);
+
+      const cardsDiv = document.createElement('div');
+      cardsDiv.className = 'hand';
+      hand.cards.forEach(c => cardsDiv.appendChild(cardElement(c, false)));
+      row.appendChild(cardsDiv);
+
+      playerHandsEl.appendChild(row);
+    });
+
+    const activeHand = playerHands[activeHandIndex];
+    if (activeHand) {
+      playerValueEl.textContent = handValue(activeHand.cards);
+    } else if (playerHands[0]) {
+      playerValueEl.textContent = handValue(playerHands[0].cards);
+    } else {
+      playerValueEl.textContent = 0;
+    }
+
+    bankEl.textContent = bank;
+    currentBetEl.textContent = currentBet;
+
+    updateBadges();
+    updateControls();
+  }
+
+  function updateControls() {
+    if (!inRound) {
+      dealBtn.disabled   = false;
+      hitBtn.disabled    = true;
+      standBtn.disabled  = true;
+      doubleBtn.disabled = true;
+      splitBtn.disabled  = true;
+      betInput.disabled  = false;
+      return;
+    }
+
+    betInput.disabled = true;
+    dealBtn.disabled  = true;
+
+    const hand = playerHands[activeHandIndex];
+    if (!hand || hand.finished) {
+      hitBtn.disabled    = true;
+      standBtn.disabled  = true;
+      doubleBtn.disabled = true;
+      splitBtn.disabled  = true;
+      return;
+    }
+
+    hitBtn.disabled   = false;
+    standBtn.disabled = false;
+
+    const canDouble = hand.cards.length === 2 && bank >= hand.bet;
+    doubleBtn.disabled = !canDouble;
+
+    const canSplit =
+      playerHands.length === 1 &&
+      hand.cards.length === 2 &&
+      hand.cards[0].rank === hand.cards[1].rank &&
+      bank >= baseBet;
+
+    splitBtn.disabled = !canSplit;
+  }
+
+  function resetForNextRound() {
+    deck = [];
+    dealer = [];
+    playerHands = [];
+    activeHandIndex = 0;
+    inRound = false;
+    dealerHidden = true;
+    baseBet = 0;
+    currentBet = 0;
+    betInput.disabled = false;
+    render();
+  }
+
+  function applyPayout(bet, multiplier, outcomeText) {
+    if (multiplier > 0) {
+      const gain = Math.floor(bet * multiplier);
+      bank += gain;
+      updateHistory(`${outcomeText} (+${gain} crédits)`);
+      log(outcomeText + ' — vous gagnez ! 🤑');
+      playSound(winSound);
+    } else if (multiplier === 0) {
+      bank += bet;
+      updateHistory(`${outcomeText} (mise retournée)`);
+      log(outcomeText + ' — push.');
+    } else {
+      updateHistory(`${outcomeText} (${bet} perdus)`);
+      log(outcomeText + ' — vous perdez.');
+      playSound(loseSound);
+    }
+  }
+
+  function settleHands() {
+    const dVal = handValue(dealer);
+
+    playerHands.forEach((hand, index) => {
+      const pVal = handValue(hand.cards);
+      let outcome;
+      let multiplier = -1; // défaut = perte
+
+      if (pVal > 21) {
+        outcome = `Main ${index + 1}: bust (${pVal})`;
+        multiplier = -1;
+      } else if (dVal > 21) {
+        outcome = `Main ${index + 1}: dealer bust (${dVal})`;
+        multiplier = 2;
+      } else if (pVal > dVal) {
+        outcome = `Main ${index + 1}: ${pVal} contre ${dVal}`;
+        multiplier = 2;
+      } else if (pVal < dVal) {
+        outcome = `Main ${index + 1}: ${pVal} contre ${dVal} — dealer gagne`;
+        multiplier = -1;
+      } else {
+        outcome = `Main ${index + 1}: égalité (${pVal})`;
+        multiplier = 0;
+      }
+
+      applyPayout(hand.bet, multiplier, outcome);
+    });
+
+    const delta = bank - roundStartBank;
+    showBankDelta(delta);
+
+    inRound = false;
+    setTimeout(() => {
+      resetForNextRound();
+    }, 1000);
+    render();
+  }
+
+  function dealerPlay() {
+    // Révéler la carte cachée puis tirage avec délai
+    dealerHidden = false;
+    render();
+
+    const step = () => {
+      if (handValue(dealer) < 17) {
+        dealer.push(deck.pop());
+        playSound(cardSound);
+        render();
+        setTimeout(step, 650); // délai entre chaque carte du dealer
+      } else {
+        // petite pause avant la résolution
+        setTimeout(() => settleHands(), 500);
+      }
+    };
+
+    setTimeout(step, 650);
+  }
+
+  function gotoNextHandOrDealer() {
+    // Si une main suivante existe, on la joue
+    if (activeHandIndex < playerHands.length - 1) {
+      activeHandIndex++;
+      log('Tour de la main ' + (activeHandIndex + 1));
+      render();
+      return;
+    }
+
+    // Sinon, toutes les mains sont finies -> tour du dealer
+    activeHandIndex = playerHands.length; // pour le badge "dealer"
+    render();
+    setTimeout(() => dealerPlay(), 600);
+  }
+
+  // ---- Actions ----
+
+  function onDeal() {
+    if (dealBtn.disabled) return;
+
+    let bet = Math.floor(Number(betInput.value) || 0);
+    if (bet < 1) bet = 1;
+    if (bet > bank) {
+      alert('Mise supérieure au solde');
+      return;
+    }
+
+    // Nouvelle manche : on garde le bank de départ pour le delta
+    roundStartBank = bank;
+
+    deck = shuffle(createDeck());
+    dealer = [];
+    playerHands = [];
+    activeHandIndex = 0;
+    inRound = true;
+    dealerHidden = true;
+
+    baseBet = bet;
+    currentBet = bet;
+    bank -= bet;
+
+    // distribution initiale (dealers + joueur)
+    dealer.push(deck.pop());
+    playSound(cardSound);
+    dealer.push(deck.pop());
+    playSound(cardSound);
+
+    const pHand = [deck.pop(), deck.pop()];
+    playSound(cardSound);
+    playSound(cardSound);
+
+    playerHands.push(makeHand(pHand, bet));
+
+    log('Distribution — mise ' + bet);
+    render();
+
+    // Vérifier Blackjack immédiat
+    const pVal = handValue(playerHands[0].cards);
+    const dVal = handValue(dealer);
+
+    if (pVal === 21) {
+      dealerHidden = false;
+      render();
+      if (dVal === 21) {
+        applyPayout(baseBet, 0, 'Blackjack des deux — égalité');
+      } else {
+        applyPayout(baseBet, 2.5, 'Blackjack !');
+      }
+      const delta = bank - roundStartBank;
+      showBankDelta(delta);
+      inRound = false;
+      setTimeout(() => {
+        resetForNextRound();
+      }, 1000);
+    }
+  }
+
+  function onHit() {
+    if (hitBtn.disabled || !inRound) return;
+    const hand = playerHands[activeHandIndex];
+    if (!hand || hand.finished) return;
+
+    hand.cards.push(deck.pop());
+    playSound(cardSound);
+    const val = handValue(hand.cards);
+    log(`Hit sur la main ${activeHandIndex + 1} (${val})`);
+
+    if (val > 21) {
+      hand.finished = true;
+      hand.busted = true;
+      log(`Main ${activeHandIndex + 1} bust (${val})`);
+      render();
+      setTimeout(() => gotoNextHandOrDealer(), 400);
+    } else {
+      render();
+    }
+  }
+
+  function onStand() {
+    if (standBtn.disabled || !inRound) return;
+    const hand = playerHands[activeHandIndex];
+    if (!hand || hand.finished) return;
+
+    hand.finished = true;
+    log(`Stand sur la main ${activeHandIndex + 1} (${handValue(hand.cards)})`);
+    render();
+    setTimeout(() => gotoNextHandOrDealer(), 350);
+  }
+
+  function onDouble() {
+    if (doubleBtn.disabled || !inRound) return;
+    const hand = playerHands[activeHandIndex];
+    if (!hand || hand.finished) return;
+
+    if (bank < hand.bet) {
+      alert('Pas assez de crédits pour doubler');
+      return;
+    }
+
+    bank -= hand.bet;
+    currentBet += hand.bet;
+    hand.bet *= 2;
+
+    hand.cards.push(deck.pop());
+    playSound(cardSound);
+    hand.finished = true;
+
+    const val = handValue(hand.cards);
+    log(`Double sur la main ${activeHandIndex + 1} (${val})`);
+
+    render();
+    setTimeout(() => gotoNextHandOrDealer(), 400);
+  }
+
+  function onSplit() {
+    if (splitBtn.disabled || !inRound) return;
+    if (playerHands.length !== 1) return;
+
+    const hand = playerHands[0];
+    if (!hand || hand.cards.length !== 2) return;
+    if (hand.cards[0].rank !== hand.cards[1].rank) {
+      alert('Vous ne pouvez splitter que des cartes de même rang.');
+      return;
+    }
+    if (bank < baseBet) {
+      alert('Pas assez de crédits pour splitter');
+      return;
+    }
+
+    bank -= baseBet;
+    currentBet += baseBet;
+
+    const [c1, c2] = hand.cards;
+    const newHand1 = makeHand([c1, deck.pop()], baseBet);
+    const newHand2 = makeHand([c2, deck.pop()], baseBet);
+    playSound(cardSound);
+    playSound(cardSound);
+
+    playerHands = [newHand1, newHand2];
+    activeHandIndex = 0;
+
+    log('Split effectué — deux mains créées');
+    render();
+  }
+
+  function onReset() {
+    if (!confirm('Réinitialiser la partie ? Votre solde reviendra à 100.')) return;
+    bank = 100;
+    roundStartBank = bank;
+    historyEl.innerHTML = '';
+    log('Partie réinitialisée');
+    showBankDelta(0);
+    resetForNextRound();
+  }
+
+  // ---- Chips ----
+  chipButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (betInput.disabled) return;
+      const delta = Number(btn.dataset.amount);
+      let current = Math.floor(Number(betInput.value) || 0);
+      current += delta;
+      if (current < 1) current = 1;
+      betInput.value = current;
+    });
+  });
+
+  // Boutons
+  dealBtn.addEventListener('click', onDeal);
+  hitBtn.addEventListener('click', onHit);
+  standBtn.addEventListener('click', onStand);
+  doubleBtn.addEventListener('click', onDouble);
+  splitBtn.addEventListener('click', onSplit);
+  resetBtn.addEventListener('click', onReset);
+
+  // Raccourcis clavier
+  window.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if (key === 'd') onDeal();
+    if (key === 'h') onHit();
+    if (key === 's') onStand();
+  });
+
+  // Rendu initial
+  resetForNextRound();
+})();
