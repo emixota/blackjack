@@ -3,27 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BlackJack - Jeu</title>
+  <title>Blackjack Casino</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="table" role="application" aria-label="Table de BlackJack">
+  <div class="table" role="application" aria-label="Table de Blackjack">
     <header>
-      <div>
+      <div class="title-block">
         <h1>
-          <span class="logo">21</span>
-          <span>BlackJack</span>
+          <span class="logo-chip">
+            <span class="logo-inner">BJ</span>
+          </span>
+          <span>Blackjack Casino</span>
         </h1>
+        <div class="subline">Mise minimale 1 € • Paiement Blackjack 3:2</div>
         <div class="pill-row">
           <div class="pill" id="bankPill">
-            Crédits: <strong id="bank">100</strong>
+            Solde : <strong id="bank">100 €</strong>
             <span id="bankDelta" class="bank-delta"></span>
           </div>
-          <div class="pill">Mise en jeu: <strong id="currentBet">0</strong></div>
+          <div class="pill">
+            Mise totale : <strong id="currentBet">0 €</strong>
+          </div>
         </div>
       </div>
-      <div class="status">
-        Objectif: 21 • As = 1 ou 11 • Le croupier tire jusqu'à 17
+      <div class="rules">
+        <div>Le croupier tire jusqu'à 17</div>
+        <div>As = 1 ou 11 • 10 / J / Q / K = 10</div>
       </div>
     </header>
 
@@ -32,7 +38,7 @@
         <section>
           <div class="player-row">
             <div class="player-label">
-              <strong>Dealer</strong>
+              <strong>DEALER</strong>
               <span class="badge" id="dealerBadge">En attente</span>
             </div>
             <span id="dealerValue" class="status">0</span>
@@ -42,46 +48,51 @@
 
         <hr class="divider">
 
-        <section>
+        <section class="player-section">
           <div class="player-row">
             <div class="player-label">
-              <strong>Joueur</strong>
+              <strong>JOUEUR</strong>
               <span class="badge green turn" id="playerBadge">À vous de jouer</span>
             </div>
             <span id="playerValue" class="status">0</span>
           </div>
-          <div id="playerHands" class="player-hands" aria-live="polite"></div>
+
+          <div class="player-hands-wrapper">
+            <div id="playerHands" class="player-hands" aria-live="polite"></div>
+            <!-- GROS SCORE ACTUEL -->
+            <div id="activeScoreBubble" class="score-bubble score-bubble-hidden">0</div>
+          </div>
         </section>
 
         <div class="log" id="log" aria-live="polite"></div>
       </main>
 
       <aside class="controls">
-        <label for="bet">Mise de base (min 1)</label>
+        <label for="bet">Mise de base (min 1 €)</label>
         <input id="bet" type="number" min="1" value="10" />
 
         <div class="chips">
           <button class="chip" data-amount="5">
-            <span class="value">+5</span>
-            <span class="label">Petit</span>
+            <span class="chip-value">+5 €</span>
+            <span class="chip-label">Petit</span>
           </button>
           <button class="chip" data-amount="10">
-            <span class="value">+10</span>
-            <span class="label">Standard</span>
+            <span class="chip-value">+10 €</span>
+            <span class="chip-label">Standard</span>
           </button>
           <button class="chip" data-amount="25">
-            <span class="value">+25</span>
-            <span class="label">Gros</span>
+            <span class="chip-value">+25 €</span>
+            <span class="chip-label">Gros</span>
           </button>
-          <button class="chip" data-amount="-5">
-            <span class="value">-5</span>
-            <span class="label">Corriger</span>
+          <button class="chip chip-dark" data-amount="-5">
+            <span class="chip-value">-5 €</span>
+            <span class="chip-label">Corriger</span>
           </button>
         </div>
 
         <div class="controls-buttons">
           <div class="controls-buttons-row">
-            <button id="dealBtn" class="btn">
+            <button id="dealBtn" class="btn primary">
               Distribuer
               <span class="kbd">D</span>
             </button>
@@ -105,26 +116,26 @@
           </div>
 
           <div class="controls-buttons-row">
-            <button id="resetBtn" class="btn danger secondary">
-              Réinitialiser
+            <button id="resetBtn" class="btn danger">
+              Réinitialiser le solde
             </button>
           </div>
         </div>
 
         <div class="history-title">
-          <strong>Historique</strong>
-          <small>Net par main</small>
+          <strong>Historique des coups</strong>
+          <small>Gain / perte par main</small>
         </div>
         <div id="history"></div>
 
         <div class="kbd-hint">
-          Raccourcis clavier : <strong>D</strong> = Distribuer, <strong>H</strong> = Hit, <strong>S</strong> = Stand
+          Raccourcis : <strong>D</strong> = Distribuer • <strong>H</strong> = Hit • <strong>S</strong> = Stand
         </div>
       </aside>
     </div>
 
     <footer>
-      Code simple, autonome<span class="dot"></span>ouvre juste ce fichier dans ton navigateur.
+      <span class="dot"></span> Solde et dernière mise sauvegardés (anti F5).
     </footer>
   </div>
 
