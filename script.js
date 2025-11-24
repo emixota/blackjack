@@ -1,4 +1,4 @@
-// BlackJack : split, double, multi-mains, UI, sons, anti-F5
+// Blackjack : split 10/J/Q/K, sons, anti-F5, euros, UI casino, bulle de score
 (() => {
   const STORAGE_KEY_BANK = 'blackjack_bank_v1';
   const STORAGE_KEY_BET  = 'blackjack_bet_v1';
@@ -10,6 +10,7 @@
   const playerValueEl  = document.getElementById('playerValue');
   const dealerBadgeEl  = document.getElementById('dealerBadge');
   const playerBadgeEl  = document.getElementById('playerBadge');
+  const activeScoreBubbleEl = document.getElementById('activeScoreBubble');
 
   const dealBtn   = document.getElementById('dealBtn');
   const hitBtn    = document.getElementById('hitBtn');
@@ -38,6 +39,10 @@
     audio.play().catch(() => {});
   }
 
+  function formatEuro(n) {
+    return `${n.toLocaleString('fr-FR')} €`;
+  }
+
   // État
   let deck = [];
   let dealer = [];
@@ -51,13 +56,14 @@
   let dealerHidden = true;
   let roundStartBank = bank;
 
+  // --- Persistence solde / mise ---
   function loadBank() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_BANK);
       const n = Number(raw);
       if (!Number.isNaN(n) && n >= 0) return n;
     } catch (e) {}
-    return 100;
+    return 100; // solde de départ par défaut
   }
 
   function saveBank() {
@@ -178,7 +184,8 @@
     bankDeltaEl.classList.remove('show','gain','loss');
     void bankDeltaEl.offsetWidth; // force reflow
 
-    bankDeltaEl.textContent = (delta > 0 ? '+' : '') + delta;
+    const signed = (delta > 0 ? '+' : '-') + formatEuro(Math.abs(delta));
+    bankDeltaEl.textContent = signed;
     bankDeltaEl.classList.add(delta > 0 ? 'gain' : 'loss');
     bankDeltaEl.classList.add('show');
 
@@ -252,7 +259,7 @@
       header.appendChild(left);
 
       const right = document.createElement('span');
-      right.textContent = `${handValue(hand.cards)} pts • Mise ${hand.bet}`;
+      right.textContent = `${handValue(hand.cards)} pts • Mise ${formatEuro(hand.bet)}`;
       header.appendChild(right);
 
       row.appendChild(header);
@@ -265,17 +272,28 @@
       playerHandsEl.appendChild(row);
     });
 
+    let activeScore = 0;
     const activeHand = playerHands[activeHandIndex];
     if (activeHand) {
-      playerValueEl.textContent = handValue(activeHand.cards);
+      activeScore = handValue(activeHand.cards);
     } else if (playerHands[0]) {
-      playerValueEl.textContent = handValue(playerHands[0].cards);
-    } else {
-      playerValueEl.textContent = 0;
+      activeScore = handValue(playerHands[0].cards);
     }
 
-    bankEl.textContent = bank;
-    currentBetEl.textContent = currentBet;
+    playerValueEl.textContent = activeScore;
+
+    // Bulle de score
+    if (activeScoreBubbleEl) {
+      activeScoreBubbleEl.textContent = activeScore || 0;
+      if (inRound && playerHands.length) {
+        activeScoreBubbleEl.classList.remove('score-bubble-hidden');
+      } else {
+        activeScoreBubbleEl.classList.add('score-bubble-hidden');
+      }
+    }
+
+    bankEl.textContent = formatEuro(bank);
+    currentBetEl.textContent = formatEuro(currentBet);
 
     updateBadges();
     updateControls();
@@ -340,17 +358,17 @@
       const gain = Math.floor(bet * multiplier);
       bank += gain;
       saveBank();
-      updateHistory(`${outcomeText} (+${gain} crédits)`);
+      updateHistory(`${outcomeText} ( +${formatEuro(gain)} )`);
       log(outcomeText + ' — vous gagnez ! 🤑');
       playSound(winSound);
     } else if (multiplier === 0) {
       bank += bet;
       saveBank();
-      updateHistory(`${outcomeText} (mise retournée)`);
+      updateHistory(`${outcomeText} ( mise retournée )`);
       log(outcomeText + ' — push.');
     } else {
-      // perte : pas de remboursement, la mise a déjà été retirée du bank
-      updateHistory(`${outcomeText} (${bet} perdus)`);
+      // perte : la mise a déjà été retirée du solde
+      updateHistory(`${outcomeText} ( -${formatEuro(bet)} )`);
       log(outcomeText + ' — vous perdez.');
       playSound(loseSound);
     }
@@ -437,14 +455,14 @@
     let bet = Math.floor(Number(betInput.value) || 0);
     if (bet < 1) bet = 1;
     if (bet > bank) {
-      alert('Mise supérieure au solde');
+      alert('Mise supérieure au solde disponible');
       return;
     }
 
     betInput.value = bet;
     saveBetValue(bet);
 
-    // Nouvelle manche : on garde le bank de départ pour le delta
+    // Nouvelle manche : on garde le solde de départ pour le delta
     roundStartBank = bank;
 
     deck = shuffle(createDeck());
@@ -471,7 +489,7 @@
 
     playerHands.push(makeHand(pHand, bet));
 
-    log('Distribution — mise ' + bet);
+    log('Distribution — mise ' + formatEuro(bet));
     render();
 
     // Vérifier Blackjack immédiat
@@ -533,7 +551,7 @@
     if (!hand || hand.finished) return;
 
     if (bank < hand.bet) {
-      alert('Pas assez de crédits pour doubler');
+      alert('Pas assez de solde pour doubler');
       return;
     }
 
@@ -564,11 +582,11 @@
     const bothTenVal = isTenValue(hand.cards[0]) && isTenValue(hand.cards[1]);
 
     if (!sameRank && !bothTenVal) {
-      alert('Vous ne pouvez splitter que des cartes de même rang ou toutes les cartes qui valent 10 (10, J, Q, K).');
+      alert('Split autorisé seulement sur cartes de même rang ou toutes les cartes valant 10 (10, J, Q, K).');
       return;
     }
     if (bank < baseBet) {
-      alert('Pas assez de crédits pour splitter');
+      alert('Pas assez de solde pour splitter');
       return;
     }
 
@@ -590,12 +608,12 @@
   }
 
   function onReset() {
-    if (!confirm('Réinitialiser la partie ? Votre solde reviendra à 100.')) return;
+    if (!confirm('Réinitialiser le solde à 100 € ?')) return;
     bank = 100;
     saveBank();
     roundStartBank = bank;
     historyEl.innerHTML = '';
-    log('Partie réinitialisée');
+    log('Solde réinitialisé à 100 €');
     showBankDelta(0);
     resetForNextRound();
   }
@@ -636,9 +654,7 @@
     if (key === 's') onStand();
   });
 
-  // Initialisation : charge mise depuis le stockage
+  // Initialisation : charge mise & solde depuis le stockage
   betInput.value = loadBetValue();
-
-  // Rendu initial (banque déjà chargée depuis localStorage)
   render();
 })();
