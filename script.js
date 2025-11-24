@@ -1,5 +1,8 @@
-// BlackJack : split, double, multi-mains, UI, sons, animé
+// BlackJack : split, double, multi-mains, UI, sons, anti-F5
 (() => {
+  const STORAGE_KEY_BANK = 'blackjack_bank_v1';
+  const STORAGE_KEY_BET  = 'blackjack_bet_v1';
+
   // DOM
   const dealerHandEl   = document.getElementById('dealerHand');
   const playerHandsEl  = document.getElementById('playerHands');
@@ -41,13 +44,44 @@
   let playerHands = []; // [{cards:[], bet:number, finished:boolean, busted:boolean}]
   let activeHandIndex = 0;
 
-  let bank = 100;
+  let bank = loadBank();
   let baseBet = 0;
   let currentBet = 0; // somme des mises posées sur la table
   let inRound = false;
   let dealerHidden = true;
   let roundStartBank = bank;
 
+  function loadBank() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_BANK);
+      const n = Number(raw);
+      if (!Number.isNaN(n) && n >= 0) return n;
+    } catch (e) {}
+    return 100;
+  }
+
+  function saveBank() {
+    try {
+      localStorage.setItem(STORAGE_KEY_BANK, String(bank));
+    } catch (e) {}
+  }
+
+  function saveBetValue(value) {
+    try {
+      localStorage.setItem(STORAGE_KEY_BET, String(value));
+    } catch (e) {}
+  }
+
+  function loadBetValue() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_BET);
+      const n = Number(raw);
+      if (!Number.isNaN(n) && n >= 1) return n;
+    } catch (e) {}
+    return 10;
+  }
+
+  // Deck & cartes
   function createDeck() {
     const suits = ['♠','♥','♦','♣'];
     const names = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -106,6 +140,11 @@
       aces--;
     }
     return total;
+  }
+
+  function isTenValue(card) {
+    if (!card) return false;
+    return card.rank === '10' || card.rank === 'J' || card.rank === 'Q' || card.rank === 'K';
   }
 
   function makeHand(cards, bet) {
@@ -271,10 +310,13 @@
     const canDouble = hand.cards.length === 2 && bank >= hand.bet;
     doubleBtn.disabled = !canDouble;
 
+    const sameRank   = hand.cards.length === 2 && hand.cards[0].rank === hand.cards[1].rank;
+    const bothTenVal = hand.cards.length === 2 && isTenValue(hand.cards[0]) && isTenValue(hand.cards[1]);
+
     const canSplit =
       playerHands.length === 1 &&
       hand.cards.length === 2 &&
-      hand.cards[0].rank === hand.cards[1].rank &&
+      (sameRank || bothTenVal) &&
       bank >= baseBet;
 
     splitBtn.disabled = !canSplit;
@@ -297,14 +339,17 @@
     if (multiplier > 0) {
       const gain = Math.floor(bet * multiplier);
       bank += gain;
+      saveBank();
       updateHistory(`${outcomeText} (+${gain} crédits)`);
       log(outcomeText + ' — vous gagnez ! 🤑');
       playSound(winSound);
     } else if (multiplier === 0) {
       bank += bet;
+      saveBank();
       updateHistory(`${outcomeText} (mise retournée)`);
       log(outcomeText + ' — push.');
     } else {
+      // perte : pas de remboursement, la mise a déjà été retirée du bank
       updateHistory(`${outcomeText} (${bet} perdus)`);
       log(outcomeText + ' — vous perdez.');
       playSound(loseSound);
@@ -396,6 +441,9 @@
       return;
     }
 
+    betInput.value = bet;
+    saveBetValue(bet);
+
     // Nouvelle manche : on garde le bank de départ pour le delta
     roundStartBank = bank;
 
@@ -409,8 +457,9 @@
     baseBet = bet;
     currentBet = bet;
     bank -= bet;
+    saveBank();
 
-    // distribution initiale (dealers + joueur)
+    // distribution initiale (dealer + joueur)
     dealer.push(deck.pop());
     playSound(cardSound);
     dealer.push(deck.pop());
@@ -489,6 +538,7 @@
     }
 
     bank -= hand.bet;
+    saveBank();
     currentBet += hand.bet;
     hand.bet *= 2;
 
@@ -509,8 +559,12 @@
 
     const hand = playerHands[0];
     if (!hand || hand.cards.length !== 2) return;
-    if (hand.cards[0].rank !== hand.cards[1].rank) {
-      alert('Vous ne pouvez splitter que des cartes de même rang.');
+
+    const sameRank   = hand.cards[0].rank === hand.cards[1].rank;
+    const bothTenVal = isTenValue(hand.cards[0]) && isTenValue(hand.cards[1]);
+
+    if (!sameRank && !bothTenVal) {
+      alert('Vous ne pouvez splitter que des cartes de même rang ou toutes les cartes qui valent 10 (10, J, Q, K).');
       return;
     }
     if (bank < baseBet) {
@@ -519,6 +573,7 @@
     }
 
     bank -= baseBet;
+    saveBank();
     currentBet += baseBet;
 
     const [c1, c2] = hand.cards;
@@ -537,6 +592,7 @@
   function onReset() {
     if (!confirm('Réinitialiser la partie ? Votre solde reviendra à 100.')) return;
     bank = 100;
+    saveBank();
     roundStartBank = bank;
     historyEl.innerHTML = '';
     log('Partie réinitialisée');
@@ -553,7 +609,15 @@
       current += delta;
       if (current < 1) current = 1;
       betInput.value = current;
+      saveBetValue(current);
     });
+  });
+
+  betInput.addEventListener('change', () => {
+    let v = Math.floor(Number(betInput.value) || 0);
+    if (v < 1) v = 1;
+    betInput.value = v;
+    saveBetValue(v);
   });
 
   // Boutons
@@ -572,6 +636,9 @@
     if (key === 's') onStand();
   });
 
-  // Rendu initial
-  resetForNextRound();
+  // Initialisation : charge mise depuis le stockage
+  betInput.value = loadBetValue();
+
+  // Rendu initial (banque déjà chargée depuis localStorage)
+  render();
 })();
