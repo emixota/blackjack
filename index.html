@@ -213,6 +213,37 @@
     }
     .score-pop { transform: scale(1.4); }
 
+    /* Support du Split */
+    .hands-wrapper {
+        display: flex;
+        justify-content: center;
+        gap: 30px;
+        width: 100%;
+    }
+    
+    .single-hand-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        min-width: 120px;
+        transition: opacity 0.3s;
+    }
+    
+    .single-hand-container.inactive {
+        opacity: 0.4;
+        transform: scale(0.95);
+    }
+    
+    .single-hand-container.active::after {
+        content: "▲";
+        position: absolute;
+        bottom: -30px;
+        color: var(--gold);
+        font-size: 1.5rem;
+        animation: bounce 1s infinite;
+    }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+
     .cards-container {
       display: flex;
       justify-content: center;
@@ -433,12 +464,15 @@
       <p id="notifMessage">+20 €</p>
     </div>
 
+    <!-- PLAYER ZONE (Modifié pour Multi-mains) -->
     <div class="hand-zone player-zone">
       <div class="zone-label">
         <span>JOUEUR</span>
-        <span class="score-bubble" id="playerScore">0</span>
+        <!-- Score removed here, moved to individual hands -->
       </div>
-      <div class="cards-container" id="playerCards"></div>
+      <div class="hands-wrapper" id="playerHandsContainer">
+          <!-- Les mains seront injectées ici par JS -->
+      </div>
     </div>
   </div>
 
@@ -461,13 +495,14 @@
     <div id="actionControls" class="action-bar" style="display:none;">
       <button class="btn btn-hit" id="hitBtn">HIT</button>
       <button class="btn btn-stand" id="standBtn">STAND</button>
-      <button class="btn btn-secondary" id="doubleBtn">DOUBLE x2</button>
+      <button class="btn btn-secondary" id="doubleBtn">DOUBLE</button>
+      <button class="btn btn-secondary" id="splitBtn" disabled>SPLIT</button>
       <button class="btn btn-purple" id="insuranceBtn" disabled style="display:none">ASSURANCE</button>
       <button class="btn btn-orange" id="surrenderBtn" disabled>ABANDON</button>
     </div>
     
     <div style="text-align:center; font-size: 0.7rem; color: #64748b; margin-top: 5px;">
-      Blackjack paye 3:2 • Assurance 2:1 • Abandon paye 1:2
+      Blackjack paye 3:2 • Assurance 2:1 • Split 10/Valet/Dame/Roi OK
     </div>
   </aside>
 </div>
@@ -481,8 +516,7 @@
     chip: () => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(audioCtx.destination);
       osc.type = 'sine';
       osc.frequency.setValueAtTime(2500, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
@@ -510,10 +544,8 @@
           setTimeout(() => {
               const osc = audioCtx.createOscillator();
               const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'triangle';
-              osc.frequency.value = freq;
+              osc.connect(gain); gain.connect(audioCtx.destination);
+              osc.type = 'triangle'; osc.frequency.value = freq;
               gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
               gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
               osc.start(); osc.stop(audioCtx.currentTime + 0.4);
@@ -523,8 +555,7 @@
     lose: () => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(audioCtx.destination);
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(150, audioCtx.currentTime);
       osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.4);
@@ -553,15 +584,12 @@
       this.rotationSpeed = Math.random() * 10 - 5;
     }
     update() {
-      this.x += this.speedX;
-      this.y += this.speedY;
-      this.speedY += this.gravity;
-      this.life--;
+      this.x += this.speedX; this.y += this.speedY;
+      this.speedY += this.gravity; this.life--;
       this.rotation += this.rotationSpeed;
     }
     draw(ctx) {
-      ctx.save();
-      ctx.translate(this.x, this.y);
+      ctx.save(); ctx.translate(this.x, this.y);
       ctx.rotate(this.rotation * Math.PI / 180);
       ctx.fillStyle = this.color;
       ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
@@ -573,24 +601,18 @@
   const ctx = canvas.getContext('2d');
   let particles = [];
   
-  const resizeCanvas = () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  };
+  const resizeCanvas = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
   const spawnConfetti = () => {
-    for(let i=0; i<100; i++) {
-        particles.push(new Particle(window.innerWidth/2, window.innerHeight/2));
-    }
+    for(let i=0; i<100; i++) particles.push(new Particle(window.innerWidth/2, window.innerHeight/2));
   };
 
   const animateParticles = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     particles.forEach((p, index) => {
-        p.update();
-        p.draw(ctx);
+        p.update(); p.draw(ctx);
         if(p.life <= 0) particles.splice(index, 1);
     });
     requestAnimationFrame(animateParticles);
@@ -599,10 +621,15 @@
 
   // --- STATE ---
   let bank = parseFloat(localStorage.getItem('bj_bank')) || 100;
-  let currentBet = 0;
+  let currentBet = 0; // Mise initiale par main
   let deck = [];
   let dealerHand = [];
-  let playerHand = [];
+  
+  // NOUVEAU: Multi-mains
+  // Structure: { cards: [], bet: number, done: boolean, status: 'playing'|'stand'|'bust'|'blackjack'|'surrender' }
+  let playerHands = []; 
+  let activeHandIndex = 0; // Quelle main joue actuellement
+  
   let gameActive = false;
   let insuranceBet = 0; 
   
@@ -617,9 +644,8 @@
     bank: document.getElementById('bankDisplay'),
     bet: document.getElementById('betDisplay'),
     dealerCards: document.getElementById('dealerCards'),
-    playerCards: document.getElementById('playerCards'),
+    playerHandsContainer: document.getElementById('playerHandsContainer'),
     dealerScore: document.getElementById('dealerScore'),
-    playerScore: document.getElementById('playerScore'),
     bettingControls: document.getElementById('bettingControls'),
     actionControls: document.getElementById('actionControls'),
     notif: document.getElementById('notification'),
@@ -631,7 +657,7 @@
       hit: document.getElementById('hitBtn'),
       stand: document.getElementById('standBtn'),
       double: document.getElementById('doubleBtn'),
-      split: document.getElementById('splitBtn'),
+      split: document.getElementById('splitBtn'), // New
       insurance: document.getElementById('insuranceBtn'), 
       surrender: document.getElementById('surrenderBtn'), 
       chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
@@ -697,24 +723,60 @@
   };
 
   // --- RENDERING & SYNC ---
-  const updatePartialScore = (hand, limitIndex, scoreEl, isDealer, revealDealer) => {
-      const visibleCards = hand.slice(0, limitIndex + 1);
-      let score = 0;
-      if (isDealer && !revealDealer) {
-           if (visibleCards.length > 1) {
-               score = visibleCards[1].value;
-               if(score === 11) score = 'A'; 
-           } else {
-               score = 0;
-           }
-      } else {
-           score = calculateScore(visibleCards);
-      }
+  
+  // Crée le HTML pour une main (wrapper + score)
+  const createHandWrapper = (handIndex) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'single-hand-container';
+      wrapper.id = `hand-wrapper-${handIndex}`;
       
-      scoreEl.textContent = score;
-      scoreEl.classList.remove('score-pop');
-      void scoreEl.offsetWidth; 
-      scoreEl.classList.add('score-pop');
+      const cardsDiv = document.createElement('div');
+      cardsDiv.className = 'cards-container';
+      cardsDiv.id = `hand-cards-${handIndex}`;
+      
+      const bubble = document.createElement('span');
+      bubble.className = 'score-bubble';
+      bubble.id = `hand-score-${handIndex}`;
+      bubble.style.position = 'absolute';
+      bubble.style.top = '-40px';
+      bubble.textContent = '0';
+
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(cardsDiv);
+      return wrapper;
+  };
+
+  const updateHandUI = (handIndex, isDealer = false, revealDealer = false) => {
+      if(isDealer) {
+          const hand = dealerHand;
+          const container = els.dealerCards;
+          const scoreEl = els.dealerScore;
+          syncHandCards(hand, container, scoreEl, true, revealDealer);
+      } else {
+          // Joueur
+          const handObj = playerHands[handIndex];
+          let wrapper = document.getElementById(`hand-wrapper-${handIndex}`);
+          
+          // Si le wrapper n'existe pas encore (cas du split), on le crée
+          if (!wrapper) {
+              wrapper = createHandWrapper(handIndex);
+              els.playerHandsContainer.appendChild(wrapper);
+          }
+
+          // Mise à jour classe Active/Inactive
+          if (handIndex === activeHandIndex && gameActive) {
+              wrapper.classList.add('active');
+              wrapper.classList.remove('inactive');
+          } else {
+              wrapper.classList.remove('active');
+              if(gameActive) wrapper.classList.add('inactive'); // Griser les autres mains pendant le jeu
+              else wrapper.classList.remove('inactive');
+          }
+
+          const container = document.getElementById(`hand-cards-${handIndex}`);
+          const scoreEl = document.getElementById(`hand-score-${handIndex}`);
+          syncHandCards(handObj.cards, container, scoreEl, false, false);
+      }
   };
 
   const createCardElement = (card, hidden, delay) => {
@@ -736,20 +798,34 @@
     `;
   };
 
-  const syncHand = (hand, container, scoreEl, revealDealer, isDealerHand) => {
-    hand.forEach((card, index) => {
+  const syncHandCards = (cards, container, scoreEl, isDealer, revealDealer) => {
+    cards.forEach((card, index) => {
       let cardEl = container.children[index];
       if (!cardEl) {
-        const isHidden = (isDealerHand && index === 0 && !revealDealer);
+        const isHidden = (isDealer && index === 0 && !revealDealer);
         const delay = index * 200; 
         cardEl = createCardElement(card, isHidden, delay);
         container.appendChild(cardEl);
         playSound('card'); 
+        
+        // Update score after delay
         setTimeout(() => {
-          updatePartialScore(hand, index, scoreEl, isDealerHand, revealDealer);
+            const visibleCards = cards.slice(0, index + 1);
+            let score = 0;
+            if(isDealer && !revealDealer) {
+                if(visibleCards.length > 1) {
+                    score = visibleCards[1].value === 11 ? 'A' : visibleCards[1].value;
+                }
+            } else {
+                score = calculateScore(visibleCards);
+            }
+            scoreEl.textContent = score;
+            scoreEl.classList.remove('score-pop');
+            void scoreEl.offsetWidth; 
+            scoreEl.classList.add('score-pop');
         }, delay + 300);
       } 
-      else if (isDealerHand && index === 0 && revealDealer && cardEl.classList.contains('back')) {
+      else if (isDealer && index === 0 && revealDealer && cardEl.classList.contains('back')) {
         cardEl.classList.remove('back');
         cardEl.classList.remove('dealing');
         cardEl.classList.add('flipping');
@@ -757,15 +833,41 @@
         fillCardContent(cardEl, card);
         playSound('card'); 
         setTimeout(() => {
-           scoreEl.textContent = calculateScore(hand); 
+           scoreEl.textContent = calculateScore(cards); 
         }, 200);
       }
     });
   };
 
   const renderBoard = (revealDealer = false) => {
-    syncHand(dealerHand, els.dealerCards, els.dealerScore, revealDealer, true);
-    syncHand(playerHand, els.playerCards, els.playerScore, revealDealer, false);
+    // Render Dealer
+    updateHandUI(0, true, revealDealer);
+    
+    // Render Player Hands
+    playerHands.forEach((_, idx) => {
+        updateHandUI(idx);
+    });
+    
+    updateControls();
+  };
+
+  const updateControls = () => {
+      if(!gameActive) return;
+      
+      const hand = playerHands[activeHandIndex];
+      // Split check: 2 cartes, même valeur, assez d'argent
+      if(hand && hand.cards.length === 2 && hand.cards[0].value === hand.cards[1].value && bank >= hand.bet) {
+          els.btns.split.disabled = false;
+      } else {
+          els.btns.split.disabled = true;
+      }
+
+      // Double check
+      if(hand && bank >= hand.bet && hand.cards.length === 2) {
+          els.btns.double.disabled = false;
+      } else {
+          els.btns.double.disabled = true;
+      }
   };
 
   // --- ACTIONS ---
@@ -779,27 +881,37 @@
 
     gameActive = true;
     insuranceBet = 0; 
+    activeHandIndex = 0;
     deck = shuffle(createDeck());
-    playerHand = [deck.pop(), deck.pop()];
     dealerHand = [deck.pop(), deck.pop()];
+    
+    // Init Player Hands
+    playerHands = [{
+        cards: [deck.pop(), deck.pop()],
+        bet: currentBet,
+        done: false,
+        status: 'playing'
+    }];
 
     els.bettingControls.style.display = 'none';
     els.actionControls.style.display = 'flex';
     els.notif.classList.remove('show');
 
+    // Reset DOM
     els.dealerCards.innerHTML = '';
-    els.playerCards.innerHTML = '';
-    els.playerScore.textContent = '0';
+    els.playerHandsContainer.innerHTML = ''; // Clear wrapper
     els.dealerScore.textContent = '0';
     
-    // Reset buttons state
+    // Reset buttons
     els.btns.surrender.disabled = false; 
     els.btns.insurance.style.display = 'none'; 
     els.btns.insurance.disabled = true;
+    els.btns.hit.disabled = false;
+    els.btns.stand.disabled = false;
 
     renderBoard(false);
 
-    // Check for Insurance
+    // Check Insurance
     setTimeout(() => {
         if(dealerHand[1].rank === 'A' && bank >= currentBet/2) {
              els.btns.insurance.style.display = 'flex';
@@ -808,47 +920,110 @@
         }
     }, 800);
 
-    if(calculateScore(playerHand) === 21) {
-      setTimeout(() => endRound(), 1800);
+    // Check Blackjack Naturel (sur la première main seulement au début)
+    if(calculateScore(playerHands[0].cards) === 21) {
+        playerHands[0].status = 'blackjack';
+        playerHands[0].done = true;
+        setTimeout(() => nextHand(), 1500);
     }
-    els.btns.double.disabled = (bank < currentBet);
   };
 
   const hit = () => {
     els.btns.surrender.disabled = true; 
     els.btns.insurance.disabled = true; 
-    const card = deck.pop();
-    playerHand.push(card);
+    els.btns.split.disabled = true; // Can't split after hit
+    els.btns.double.disabled = true;
+
+    const hand = playerHands[activeHandIndex];
+    hand.cards.push(deck.pop());
     renderBoard(false);
-    if(calculateScore(playerHand) > 21) {
-      setTimeout(() => endRound(), 1200);
+    
+    const score = calculateScore(hand.cards);
+    if(score > 21) {
+        hand.status = 'bust';
+        hand.done = true;
+        setTimeout(() => nextHand(), 1000);
+    } else if (score === 21) {
+        // AUTO STAND ON 21
+        hand.status = 'stand';
+        hand.done = true;
+        setTimeout(() => nextHand(), 800);
     }
   };
 
   const stand = () => {
-    els.btns.hit.disabled = true;
-    els.btns.stand.disabled = true;
-    els.btns.double.disabled = true;
-    els.btns.surrender.disabled = true;
-    els.btns.insurance.disabled = true;
-    dealerPlay();
+    const hand = playerHands[activeHandIndex];
+    hand.status = 'stand';
+    hand.done = true;
+    nextHand();
   };
 
   const double = () => {
-    if(bank >= currentBet) {
-      bank -= currentBet;
-      currentBet *= 2;
+    const hand = playerHands[activeHandIndex];
+    if(bank >= hand.bet) {
+      bank -= hand.bet;
+      hand.bet *= 2;
       updateHUD();
       playSound('chip');
-      playerHand.push(deck.pop());
+      
+      hand.cards.push(deck.pop());
       renderBoard(false);
-      setTimeout(() => {
-        if(calculateScore(playerHand) > 21) endRound();
-        else stand();
-      }, 1000);
+      
+      const score = calculateScore(hand.cards);
+      if(score > 21) hand.status = 'bust';
+      else hand.status = 'stand';
+      
+      hand.done = true;
+      setTimeout(() => nextHand(), 1000);
     }
   };
+
+  const split = () => {
+      const hand = playerHands[activeHandIndex];
+      // Logic split
+      bank -= hand.bet;
+      updateHUD();
+      playSound('chip');
+
+      const cardToSplit = hand.cards.pop();
+      const newHand = {
+          cards: [cardToSplit, deck.pop()],
+          bet: hand.bet,
+          done: false,
+          status: 'playing'
+      };
+      
+      // Main actuelle reçoit une nouvelle carte
+      hand.cards.push(deck.pop());
+      
+      // Insérer la nouvelle main après la main actuelle
+      playerHands.splice(activeHandIndex + 1, 0, newHand);
+      
+      // On vide le conteneur joueur pour re-rendre les wrappers proprement
+      // C'est nécessaire car la structure HTML change (1 main -> 2 mains)
+      els.playerHandsContainer.innerHTML = '';
+      
+      renderBoard(false);
+      
+      // Vérif si Blackjack sur la main 1 après le split
+      if(calculateScore(hand.cards) === 21) {
+          hand.status = 'stand'; // Often split Aces receive 1 card only, standard rules vary. Here treated as normal 21.
+          hand.done = true;
+          setTimeout(() => nextHand(), 1000);
+      }
+  };
   
+  const nextHand = () => {
+      // Check if there is a next hand
+      if(activeHandIndex < playerHands.length - 1) {
+          activeHandIndex++;
+          renderBoard(false);
+      } else {
+          // All hands done, dealer turn
+          dealerPlay();
+      }
+  };
+
   const takeInsurance = () => {
       const cost = currentBet / 2;
       if(bank >= cost) {
@@ -863,26 +1038,29 @@
 
   const surrender = () => {
       if(!confirm("Êtes-vous sûr de vouloir abandonner ? Vous récupérerez la moitié de votre mise.")) return;
-      gameActive = false;
-      bank += (currentBet / 2); 
+      const hand = playerHands[activeHandIndex];
+      hand.status = 'surrender';
+      hand.done = true;
+      
+      bank += (hand.bet / 2); 
       updateHUD();
       playSound('lose');
       showNotification("ABANDON", "Demi-mise récupérée", "neutral");
       
-      renderBoard(true); 
-      setTimeout(() => {
-          els.actionControls.style.display = 'none';
-          els.bettingControls.style.display = 'block';
-          els.btns.hit.disabled = false;
-          els.btns.stand.disabled = false;
-          els.btns.insurance.innerText = "ASSURANCE";
-          currentBet = 0; 
-          updateHUD();
-      }, 2000);
+      nextHand();
   };
 
   const dealerPlay = async () => {
-    renderBoard(true);
+    // Si toutes les mains ont bust ou surrender, pas besoin de jouer le dealer
+    const allBustOrSurrender = playerHands.every(h => h.status === 'bust' || h.status === 'surrender');
+    
+    renderBoard(true); // Reveal dealer first card
+
+    if(allBustOrSurrender) {
+        setTimeout(endRound, 1000);
+        return;
+    }
+
     const playStep = () => {
       let dScore = calculateScore(dealerHand);
       if(dScore < 17) {
@@ -900,58 +1078,79 @@
 
   const endRound = () => {
     gameActive = false;
-    const pScore = calculateScore(playerHand);
     const dScore = calculateScore(dealerHand);
     const dealerHasBJ = (dScore === 21 && dealerHand.length === 2);
+    let totalWin = 0;
     
-    let winAmount = 0; let title = ""; let msg = ""; let type = "neutral";
+    // --- ASSURANCE ---
+    if(insuranceBet > 0) {
+        if(dealerHasBJ) {
+            bank += (insuranceBet * 3); 
+            showNotification("ASSURANCE", "Payée !", "win");
+        }
+    }
 
-    renderBoard(true); 
+    // Evaluate each hand
+    playerHands.forEach((hand, idx) => {
+        if(hand.status === 'surrender') return; // Déjà payé
 
-    setTimeout(() => {
-        stats.games++;
-        
-        if(insuranceBet > 0) {
+        const pScore = calculateScore(hand.cards);
+        let winMult = 0; // 0 = lose (bet already taken)
+
+        if (hand.status === 'bust') {
+            // Lose
+        } else if (hand.status === 'blackjack') {
             if(dealerHasBJ) {
-                bank += (insuranceBet * 3); 
-                msg = "Assurance Payée ! ";
+                winMult = 1; // Push
             } else {
-                msg = "Assurance Perdue. ";
+                winMult = 2.5; // 3:2 payout
+            }
+        } else {
+            // Normal stand
+            if (dScore > 21) {
+                winMult = 2;
+            } else if (pScore > dScore) {
+                winMult = 2;
+            } else if (pScore === dScore) {
+                winMult = 1; // Push
             }
         }
 
-        if (pScore > 21) {
-          title = "BUST !"; msg += `Perdu ${currentBet} €`; type = "lose";
-          currentStreak = 0;
-        } else if (dScore > 21) {
-          title = "GAGNÉ !"; msg += `Dealer saute (+${currentBet} €)`; winAmount = currentBet * 2; type = "win";
-        } else if (pScore > dScore) {
-          if(pScore === 21 && playerHand.length === 2) {
-             title = "BLACKJACK !"; winAmount = currentBet + (currentBet * 1.5); msg += `Royal ! (+${winAmount - currentBet} €)`; type = "win";
-          } else {
-             title = "GAGNÉ !"; winAmount = currentBet * 2; msg += `${pScore} vs ${dScore}`; type = "win";
-          }
-        } else if (pScore < dScore) {
-          title = "PERDU..."; msg += `Dealer a ${dScore}`; type = "lose";
-          currentStreak = 0;
-        } else {
-          title = "ÉGALITÉ"; msg += "Mise rendue"; winAmount = currentBet; type = "push";
+        if(winMult > 0) {
+            bank += Math.floor(hand.bet * winMult);
+            totalWin += Math.floor(hand.bet * winMult);
         }
+    });
 
-        if(type === 'win') {
-            stats.wins++;
-            currentStreak++;
-            playSound('win');
-            spawnConfetti(); 
-        } else if(type === 'lose') {
-            playSound('lose');
-        }
-
-        bank += winAmount;
+    // Global Result Notification
+    setTimeout(() => {
+        stats.games++;
         saveStats();
         updateHUD();
-        showNotification(title, msg, type);
+
+        let msg = "";
+        let type = "neutral";
         
+        // Simple logic for notification: did we make profit relative to start of round?
+        // Note: currentBet tracks initial SINGLE bet, but total invested depends on splits/doubles.
+        // Simplified feedback:
+        if(totalWin > 0) {
+            playSound('win');
+            spawnConfetti();
+            if(playerHands.some(h => h.status === 'blackjack')) msg = "BLACKJACK !";
+            else msg = "GAGNÉ !";
+            type = "win";
+            stats.wins++;
+            currentStreak++;
+        } else {
+            playSound('lose');
+            msg = "PERDU...";
+            type = "lose";
+            currentStreak = 0;
+        }
+        
+        showNotification(msg, totalWin > 0 ? `+${totalWin} €` : "", type);
+
         setTimeout(() => {
           els.actionControls.style.display = 'none';
           els.bettingControls.style.display = 'block';
@@ -961,7 +1160,7 @@
           currentBet = 0; 
           updateHUD();
         }, 3000);
-    }, 300);
+    }, 500);
   };
 
   const showNotification = (title, message, type) => {
@@ -1036,6 +1235,7 @@
   els.btns.hit.addEventListener('click', hit);
   els.btns.stand.addEventListener('click', stand);
   els.btns.double.addEventListener('click', double);
+  els.btns.split.addEventListener('click', split);
   els.btns.surrender.addEventListener('click', surrender);
   els.btns.insurance.addEventListener('click', takeInsurance);
   
