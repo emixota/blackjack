@@ -621,17 +621,15 @@
 
   // --- STATE ---
   let bank = parseFloat(localStorage.getItem('bj_bank')) || 100;
-  let currentBet = 0; // Mise initiale par main
+  let currentBet = 0; 
   let deck = [];
   let dealerHand = [];
-  
-  // NOUVEAU: Multi-mains
-  // Structure: { cards: [], bet: number, done: boolean, status: 'playing'|'stand'|'bust'|'blackjack'|'surrender' }
   let playerHands = []; 
-  let activeHandIndex = 0; // Quelle main joue actuellement
-  
+  let activeHandIndex = 0; 
   let gameActive = false;
+  let turnPhase = 'betting'; // 'betting', 'player', 'dealer', 'resolved'
   let insuranceBet = 0; 
+  let isProcessing = false; // Debounce flag
   
   // Stats
   let stats = JSON.parse(localStorage.getItem('bj_stats')) || {
@@ -657,7 +655,7 @@
       hit: document.getElementById('hitBtn'),
       stand: document.getElementById('standBtn'),
       double: document.getElementById('doubleBtn'),
-      split: document.getElementById('splitBtn'), // New
+      split: document.getElementById('splitBtn'), 
       insurance: document.getElementById('insuranceBtn'), 
       surrender: document.getElementById('surrenderBtn'), 
       chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
@@ -723,56 +721,39 @@
   };
 
   // --- RENDERING & SYNC ---
-  
-  // Crée le HTML pour une main (wrapper + score)
   const createHandWrapper = (handIndex) => {
       const wrapper = document.createElement('div');
       wrapper.className = 'single-hand-container';
       wrapper.id = `hand-wrapper-${handIndex}`;
-      
       const cardsDiv = document.createElement('div');
       cardsDiv.className = 'cards-container';
       cardsDiv.id = `hand-cards-${handIndex}`;
-      
       const bubble = document.createElement('span');
       bubble.className = 'score-bubble';
       bubble.id = `hand-score-${handIndex}`;
       bubble.style.position = 'absolute';
       bubble.style.top = '-40px';
       bubble.textContent = '0';
-
-      wrapper.appendChild(bubble);
-      wrapper.appendChild(cardsDiv);
+      wrapper.appendChild(bubble); wrapper.appendChild(cardsDiv);
       return wrapper;
   };
 
   const updateHandUI = (handIndex, isDealer = false, revealDealer = false) => {
       if(isDealer) {
-          const hand = dealerHand;
-          const container = els.dealerCards;
-          const scoreEl = els.dealerScore;
-          syncHandCards(hand, container, scoreEl, true, revealDealer);
+          syncHandCards(dealerHand, els.dealerCards, els.dealerScore, true, revealDealer);
       } else {
-          // Joueur
           const handObj = playerHands[handIndex];
           let wrapper = document.getElementById(`hand-wrapper-${handIndex}`);
-          
-          // Si le wrapper n'existe pas encore (cas du split), on le crée
           if (!wrapper) {
               wrapper = createHandWrapper(handIndex);
               els.playerHandsContainer.appendChild(wrapper);
           }
-
-          // Mise à jour classe Active/Inactive
           if (handIndex === activeHandIndex && gameActive) {
-              wrapper.classList.add('active');
-              wrapper.classList.remove('inactive');
+              wrapper.classList.add('active'); wrapper.classList.remove('inactive');
           } else {
               wrapper.classList.remove('active');
-              if(gameActive) wrapper.classList.add('inactive'); // Griser les autres mains pendant le jeu
-              else wrapper.classList.remove('inactive');
+              if(gameActive) wrapper.classList.add('inactive'); else wrapper.classList.remove('inactive');
           }
-
           const container = document.getElementById(`hand-cards-${handIndex}`);
           const scoreEl = document.getElementById(`hand-score-${handIndex}`);
           syncHandCards(handObj.cards, container, scoreEl, false, false);
@@ -789,13 +770,10 @@
 
   const fillCardContent = (div, card) => {
     const isRed = card.suit === '♥' || card.suit === '♦';
-    if(isRed) div.classList.add('red');
-    else div.classList.add('black');
-    div.innerHTML = `
-      <div class="card-top"><span>${card.rank}</span><span>${card.suit}</span></div>
+    if(isRed) div.classList.add('red'); else div.classList.add('black');
+    div.innerHTML = `<div class="card-top"><span>${card.rank}</span><span>${card.suit}</span></div>
       <div class="card-center">${card.suit}</div>
-      <div class="card-bottom"><span>${card.rank}</span><span>${card.suit}</span></div>
-    `;
+      <div class="card-bottom"><span>${card.rank}</span><span>${card.suit}</span></div>`;
   };
 
   const syncHandCards = (cards, container, scoreEl, isDealer, revealDealer) => {
@@ -807,259 +785,181 @@
         cardEl = createCardElement(card, isHidden, delay);
         container.appendChild(cardEl);
         playSound('card'); 
-        
-        // Update score after delay
         setTimeout(() => {
             const visibleCards = cards.slice(0, index + 1);
             let score = 0;
             if(isDealer && !revealDealer) {
-                if(visibleCards.length > 1) {
-                    score = visibleCards[1].value === 11 ? 'A' : visibleCards[1].value;
-                }
-            } else {
-                score = calculateScore(visibleCards);
-            }
+                if(visibleCards.length > 1) score = visibleCards[1].value === 11 ? 'A' : visibleCards[1].value;
+            } else score = calculateScore(visibleCards);
             scoreEl.textContent = score;
-            scoreEl.classList.remove('score-pop');
-            void scoreEl.offsetWidth; 
-            scoreEl.classList.add('score-pop');
+            scoreEl.classList.remove('score-pop'); void scoreEl.offsetWidth; scoreEl.classList.add('score-pop');
         }, delay + 300);
       } 
       else if (isDealer && index === 0 && revealDealer && cardEl.classList.contains('back')) {
-        cardEl.classList.remove('back');
-        cardEl.classList.remove('dealing');
-        cardEl.classList.add('flipping');
-        cardEl.style.animationDelay = '0ms';
-        fillCardContent(cardEl, card);
-        playSound('card'); 
-        setTimeout(() => {
-           scoreEl.textContent = calculateScore(cards); 
-        }, 200);
+        cardEl.classList.remove('back'); cardEl.classList.remove('dealing');
+        cardEl.classList.add('flipping'); cardEl.style.animationDelay = '0ms';
+        fillCardContent(cardEl, card); playSound('card'); 
+        setTimeout(() => { scoreEl.textContent = calculateScore(cards); }, 200);
       }
     });
   };
 
   const renderBoard = (revealDealer = false) => {
-    // Render Dealer
     updateHandUI(0, true, revealDealer);
-    
-    // Render Player Hands
-    playerHands.forEach((_, idx) => {
-        updateHandUI(idx);
-    });
-    
+    playerHands.forEach((_, idx) => updateHandUI(idx));
     updateControls();
   };
 
   const updateControls = () => {
       if(!gameActive) return;
-      
       const hand = playerHands[activeHandIndex];
-      // Split check: 2 cartes, même valeur, assez d'argent
+      // Split check
       if(hand && hand.cards.length === 2 && hand.cards[0].value === hand.cards[1].value && bank >= hand.bet) {
           els.btns.split.disabled = false;
-      } else {
-          els.btns.split.disabled = true;
-      }
-
+      } else els.btns.split.disabled = true;
       // Double check
       if(hand && bank >= hand.bet && hand.cards.length === 2) {
           els.btns.double.disabled = false;
-      } else {
-          els.btns.double.disabled = true;
-      }
+      } else els.btns.double.disabled = true;
   };
 
   // --- ACTIONS ---
 
   const startRound = () => {
+    if(isProcessing || turnPhase !== 'betting') return;
     if(audioCtx.state === 'suspended') audioCtx.resume(); 
-    if(currentBet === 0) {
-      showNotification('Mise Manquante', 'Placez une mise !', 'error');
-      return;
-    }
+    if(currentBet === 0) { showNotification('Mise Manquante', 'Placez une mise !', 'error'); return; }
 
-    gameActive = true;
-    insuranceBet = 0; 
-    activeHandIndex = 0;
+    isProcessing = true; gameActive = true; turnPhase = 'player';
+    insuranceBet = 0; activeHandIndex = 0;
     deck = shuffle(createDeck());
     dealerHand = [deck.pop(), deck.pop()];
     
-    // Init Player Hands
-    playerHands = [{
-        cards: [deck.pop(), deck.pop()],
-        bet: currentBet,
-        done: false,
-        status: 'playing'
-    }];
+    playerHands = [{ cards: [deck.pop(), deck.pop()], bet: currentBet, done: false, status: 'playing' }];
 
     els.bettingControls.style.display = 'none';
     els.actionControls.style.display = 'flex';
     els.notif.classList.remove('show');
-
-    // Reset DOM
-    els.dealerCards.innerHTML = '';
-    els.playerHandsContainer.innerHTML = ''; // Clear wrapper
-    els.dealerScore.textContent = '0';
-    
-    // Reset buttons
-    els.btns.surrender.disabled = false; 
-    els.btns.insurance.style.display = 'none'; 
-    els.btns.insurance.disabled = true;
-    els.btns.hit.disabled = false;
-    els.btns.stand.disabled = false;
+    els.dealerCards.innerHTML = ''; els.playerHandsContainer.innerHTML = ''; els.dealerScore.textContent = '0';
+    els.btns.surrender.disabled = false; els.btns.insurance.style.display = 'none'; 
+    els.btns.insurance.disabled = true; els.btns.hit.disabled = false; els.btns.stand.disabled = false;
 
     renderBoard(false);
 
-    // Check Insurance
+    // Unlock controls after deal anim
+    setTimeout(() => { isProcessing = false; }, 1000);
+
     setTimeout(() => {
         if(dealerHand[1].rank === 'A' && bank >= currentBet/2) {
-             els.btns.insurance.style.display = 'flex';
-             els.btns.insurance.disabled = false;
+             els.btns.insurance.style.display = 'flex'; els.btns.insurance.disabled = false;
              showNotification("ASSURANCE ?", "Le croupier a un As", "neutral");
         }
     }, 800);
 
-    // Check Blackjack Naturel (sur la première main seulement au début)
     if(calculateScore(playerHands[0].cards) === 21) {
-        playerHands[0].status = 'blackjack';
-        playerHands[0].done = true;
+        playerHands[0].status = 'blackjack'; playerHands[0].done = true;
         setTimeout(() => nextHand(), 1500);
     }
   };
 
   const hit = () => {
-    els.btns.surrender.disabled = true; 
-    els.btns.insurance.disabled = true; 
-    els.btns.split.disabled = true; // Can't split after hit
-    els.btns.double.disabled = true;
+    if(isProcessing || turnPhase !== 'player') return;
+    isProcessing = true;
+    els.btns.surrender.disabled = true; els.btns.insurance.disabled = true; 
+    els.btns.split.disabled = true; els.btns.double.disabled = true;
 
     const hand = playerHands[activeHandIndex];
     hand.cards.push(deck.pop());
     renderBoard(false);
     
-    const score = calculateScore(hand.cards);
-    if(score > 21) {
-        hand.status = 'bust';
-        hand.done = true;
-        setTimeout(() => nextHand(), 1000);
-    } else if (score === 21) {
-        // AUTO STAND ON 21
-        hand.status = 'stand';
-        hand.done = true;
-        setTimeout(() => nextHand(), 800);
-    }
+    setTimeout(() => {
+        const score = calculateScore(hand.cards);
+        if(score > 21) { hand.status = 'bust'; hand.done = true; nextHand(); } 
+        else if (score === 21) { hand.status = 'stand'; hand.done = true; nextHand(); } 
+        else { isProcessing = false; }
+    }, 600);
   };
 
   const stand = () => {
+    if(isProcessing || turnPhase !== 'player') return;
+    isProcessing = true;
     const hand = playerHands[activeHandIndex];
-    hand.status = 'stand';
-    hand.done = true;
+    hand.status = 'stand'; hand.done = true;
     nextHand();
   };
 
   const double = () => {
+    if(isProcessing || turnPhase !== 'player') return;
     const hand = playerHands[activeHandIndex];
     if(bank >= hand.bet) {
-      bank -= hand.bet;
-      hand.bet *= 2;
-      updateHUD();
-      playSound('chip');
-      
+      isProcessing = true;
+      bank -= hand.bet; hand.bet *= 2;
+      updateHUD(); playSound('chip');
       hand.cards.push(deck.pop());
       renderBoard(false);
-      
-      const score = calculateScore(hand.cards);
-      if(score > 21) hand.status = 'bust';
-      else hand.status = 'stand';
-      
-      hand.done = true;
-      setTimeout(() => nextHand(), 1000);
+      setTimeout(() => {
+          const score = calculateScore(hand.cards);
+          if(score > 21) hand.status = 'bust'; else hand.status = 'stand';
+          hand.done = true; nextHand();
+      }, 800);
     }
   };
 
   const split = () => {
+      if(isProcessing || turnPhase !== 'player') return;
+      isProcessing = true;
       const hand = playerHands[activeHandIndex];
-      // Logic split
-      bank -= hand.bet;
-      updateHUD();
-      playSound('chip');
+      bank -= hand.bet; updateHUD(); playSound('chip');
 
       const cardToSplit = hand.cards.pop();
-      const newHand = {
-          cards: [cardToSplit, deck.pop()],
-          bet: hand.bet,
-          done: false,
-          status: 'playing'
-      };
-      
-      // Main actuelle reçoit une nouvelle carte
+      const newHand = { cards: [cardToSplit, deck.pop()], bet: hand.bet, done: false, status: 'playing' };
       hand.cards.push(deck.pop());
-      
-      // Insérer la nouvelle main après la main actuelle
       playerHands.splice(activeHandIndex + 1, 0, newHand);
-      
-      // On vide le conteneur joueur pour re-rendre les wrappers proprement
-      // C'est nécessaire car la structure HTML change (1 main -> 2 mains)
       els.playerHandsContainer.innerHTML = '';
-      
       renderBoard(false);
       
-      // Vérif si Blackjack sur la main 1 après le split
-      if(calculateScore(hand.cards) === 21) {
-          hand.status = 'stand'; // Often split Aces receive 1 card only, standard rules vary. Here treated as normal 21.
-          hand.done = true;
-          setTimeout(() => nextHand(), 1000);
-      }
+      setTimeout(() => {
+          if(calculateScore(hand.cards) === 21) { hand.status = 'stand'; hand.done = true; nextHand(); } 
+          else { isProcessing = false; }
+      }, 1000);
   };
   
   const nextHand = () => {
-      // Check if there is a next hand
       if(activeHandIndex < playerHands.length - 1) {
           activeHandIndex++;
-          renderBoard(false);
+          setTimeout(() => { isProcessing = false; renderBoard(false); }, 300);
       } else {
-          // All hands done, dealer turn
           dealerPlay();
       }
   };
 
   const takeInsurance = () => {
+      if(isProcessing || turnPhase !== 'player') return;
       const cost = currentBet / 2;
       if(bank >= cost) {
-          bank -= cost;
-          insuranceBet = cost;
-          updateHUD();
-          playSound('chip');
-          els.btns.insurance.disabled = true;
-          els.btns.insurance.innerText = "ASSURÉ";
+          bank -= cost; insuranceBet = cost;
+          updateHUD(); playSound('chip');
+          els.btns.insurance.disabled = true; els.btns.insurance.innerText = "ASSURÉ";
       }
   };
 
   const surrender = () => {
-      if(!confirm("Êtes-vous sûr de vouloir abandonner ? Vous récupérerez la moitié de votre mise.")) return;
+      if(isProcessing || turnPhase !== 'player') return;
+      if(!confirm("Êtes-vous sûr de vouloir abandonner ?")) return;
+      isProcessing = true;
       const hand = playerHands[activeHandIndex];
-      hand.status = 'surrender';
-      hand.done = true;
-      
-      bank += (hand.bet / 2); 
-      updateHUD();
-      playSound('lose');
+      hand.status = 'surrender'; hand.done = true;
+      bank += (hand.bet / 2); updateHUD(); playSound('lose');
       showNotification("ABANDON", "Demi-mise récupérée", "neutral");
-      
       nextHand();
   };
 
   const dealerPlay = async () => {
-    // Si toutes les mains ont bust ou surrender, pas besoin de jouer le dealer
+    turnPhase = 'dealer'; // LOCKS PLAYER INPUTS
     const allBustOrSurrender = playerHands.every(h => h.status === 'bust' || h.status === 'surrender');
-    
-    renderBoard(true); // Reveal dealer first card
+    renderBoard(true); 
 
-    if(allBustOrSurrender) {
-        setTimeout(endRound, 1000);
-        return;
-    }
+    if(allBustOrSurrender) { setTimeout(endRound, 1000); return; }
 
     const playStep = () => {
       let dScore = calculateScore(dealerHand);
@@ -1077,95 +977,55 @@
   };
 
   const endRound = () => {
-    gameActive = false;
+    turnPhase = 'resolved';
     const dScore = calculateScore(dealerHand);
     const dealerHasBJ = (dScore === 21 && dealerHand.length === 2);
     let totalWin = 0;
     
-    // --- ASSURANCE ---
     if(insuranceBet > 0) {
-        if(dealerHasBJ) {
-            bank += (insuranceBet * 3); 
-            showNotification("ASSURANCE", "Payée !", "win");
-        }
+        if(dealerHasBJ) { bank += (insuranceBet * 3); showNotification("ASSURANCE", "Payée !", "win"); }
     }
 
-    // Evaluate each hand
-    playerHands.forEach((hand, idx) => {
-        if(hand.status === 'surrender') return; // Déjà payé
-
+    playerHands.forEach((hand) => {
+        if(hand.status === 'surrender') return; 
         const pScore = calculateScore(hand.cards);
-        let winMult = 0; // 0 = lose (bet already taken)
-
-        if (hand.status === 'bust') {
-            // Lose
-        } else if (hand.status === 'blackjack') {
-            if(dealerHasBJ) {
-                winMult = 1; // Push
-            } else {
-                winMult = 2.5; // 3:2 payout
-            }
-        } else {
-            // Normal stand
-            if (dScore > 21) {
-                winMult = 2;
-            } else if (pScore > dScore) {
-                winMult = 2;
-            } else if (pScore === dScore) {
-                winMult = 1; // Push
-            }
+        let winMult = 0; 
+        if (hand.status === 'bust') { /* Lose */ } 
+        else if (hand.status === 'blackjack') { winMult = dealerHasBJ ? 1 : 2.5; } 
+        else {
+            if (dScore > 21) winMult = 2;
+            else if (pScore > dScore) winMult = 2;
+            else if (pScore === dScore) winMult = 1; 
         }
-
         if(winMult > 0) {
             bank += Math.floor(hand.bet * winMult);
             totalWin += Math.floor(hand.bet * winMult);
         }
     });
 
-    // Global Result Notification
     setTimeout(() => {
-        stats.games++;
-        saveStats();
-        updateHUD();
-
-        let msg = "";
-        let type = "neutral";
-        
-        // Simple logic for notification: did we make profit relative to start of round?
-        // Note: currentBet tracks initial SINGLE bet, but total invested depends on splits/doubles.
-        // Simplified feedback:
+        stats.games++; saveStats(); updateHUD();
+        let msg = "", type = "neutral";
         if(totalWin > 0) {
-            playSound('win');
-            spawnConfetti();
-            if(playerHands.some(h => h.status === 'blackjack')) msg = "BLACKJACK !";
-            else msg = "GAGNÉ !";
-            type = "win";
-            stats.wins++;
-            currentStreak++;
+            playSound('win'); spawnConfetti();
+            if(playerHands.some(h => h.status === 'blackjack')) msg = "BLACKJACK !"; else msg = "GAGNÉ !";
+            type = "win"; stats.wins++; currentStreak++;
         } else {
-            playSound('lose');
-            msg = "PERDU...";
-            type = "lose";
-            currentStreak = 0;
+            playSound('lose'); msg = "PERDU..."; type = "lose"; currentStreak = 0;
         }
-        
         showNotification(msg, totalWin > 0 ? `+${totalWin} €` : "", type);
 
         setTimeout(() => {
-          els.actionControls.style.display = 'none';
-          els.bettingControls.style.display = 'block';
-          els.btns.hit.disabled = false;
-          els.btns.stand.disabled = false;
+          els.actionControls.style.display = 'none'; els.bettingControls.style.display = 'block';
           els.btns.insurance.innerText = "ASSURANCE"; 
-          currentBet = 0; 
+          currentBet = 0; turnPhase = 'betting'; isProcessing = false;
           updateHUD();
         }, 3000);
     }, 500);
   };
 
   const showNotification = (title, message, type) => {
-    els.notifTitle.innerText = title;
-    els.notifMsg.innerText = message;
+    els.notifTitle.innerText = title; els.notifMsg.innerText = message;
     if(type === 'win') els.notifTitle.style.color = '#22c55e';
     else if(type === 'lose') els.notifTitle.style.color = '#ef4444';
     else els.notifTitle.style.color = '#fbbf24';
@@ -1173,10 +1033,10 @@
     setTimeout(() => els.notif.classList.remove('show'), 2500);
   };
 
-  // --- EVENTS ---
   els.btns.chips.forEach(btn => {
     btn.addEventListener('click', () => {
       if(audioCtx.state === 'suspended') audioCtx.resume();
+      if(isProcessing || turnPhase !== 'betting') return;
       const val = parseInt(btn.dataset.val);
       if(bank >= val) {
         bank -= val; currentBet += val;
@@ -1188,46 +1048,28 @@
   });
 
   els.btns.resetBet.addEventListener('click', () => {
-    if(currentBet > 0) {
-        bank += currentBet;
-        currentBet = 0;
-        updateHUD();
-        playSound('chip');
-    }
+    if(isProcessing || turnPhase !== 'betting') return;
+    if(currentBet > 0) { bank += currentBet; currentBet = 0; updateHUD(); playSound('chip'); }
   });
 
   els.btns.doubleBet.addEventListener('click', () => {
+    if(isProcessing || turnPhase !== 'betting') return;
     if(currentBet === 0) return;
     if(bank >= currentBet) {
-        bank -= currentBet;
-        currentBet *= 2;
-        updateHUD();
-        playSound('chip');
-    } else {
-        showNotification("Pas assez d'argent", "Impossible de doubler", "error");
-    }
+        bank -= currentBet; currentBet *= 2; updateHUD(); playSound('chip');
+    } else showNotification("Pas assez d'argent", "Impossible de doubler", "error");
   });
 
-  // Modal Stats
   const updateStatsUI = () => {
-      els.stats.max.innerText = stats.maxBank + ' €';
-      els.stats.streak.innerText = stats.streak;
-      els.stats.wins.innerText = stats.wins;
-      els.stats.games.innerText = stats.games;
+      els.stats.max.innerText = stats.maxBank + ' €'; els.stats.streak.innerText = stats.streak;
+      els.stats.wins.innerText = stats.wins; els.stats.games.innerText = stats.games;
   };
-  els.btns.stats.addEventListener('click', () => {
-      updateStatsUI();
-      els.modal.classList.add('open');
-  });
-  els.btns.closeStats.addEventListener('click', () => {
-      els.modal.classList.remove('open');
-  });
+  els.btns.stats.addEventListener('click', () => { updateStatsUI(); els.modal.classList.add('open'); });
+  els.btns.closeStats.addEventListener('click', () => { els.modal.classList.remove('open'); });
   els.btns.resetStats.addEventListener('click', () => {
       if(confirm('Êtes-vous sûr de vouloir remettre les statistiques à zéro ?')) {
           stats = { maxBank: bank, streak: 0, wins: 0, games: 0 };
-          currentStreak = 0;
-          saveStats();
-          updateStatsUI();
+          currentStreak = 0; saveStats(); updateStatsUI();
       }
   });
 
@@ -1243,17 +1085,13 @@
     if(confirm('Réinitialiser le solde ?')) {
         let amount = prompt("Entrez le montant de départ :", "100");
         if(amount && !isNaN(amount) && amount > 0) {
-            bank = parseFloat(amount);
-            currentBet = 0;
-            saveStats(); // Saves stats but updates maxBank if new bank is higher
-            updateHUD(); 
-            location.reload();
+            bank = parseFloat(amount); currentBet = 0; saveStats(); updateHUD(); location.reload();
         }
     }
   });
 
   window.addEventListener('keydown', (e) => {
-    if(!gameActive) return;
+    if(!gameActive || isProcessing || turnPhase !== 'player') return;
     if(e.key.toLowerCase() === 'h') hit();
     if(e.key.toLowerCase() === 's') stand();
   });
