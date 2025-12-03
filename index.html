@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-  <title>Blackjack Casino Royale</title>
+  <title>Blackjack Casino Ultimate</title>
   <style>
     /* --- VARIABLES & RESET --- */
     :root {
@@ -34,6 +34,15 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+    }
+
+    /* --- CANVAS CONFETTI --- */
+    #confetti-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 100;
     }
 
     /* --- LA TABLE --- */
@@ -86,7 +95,7 @@
       border-bottom: 1px solid rgba(255,255,255,0.05);
     }
 
-    .hud-group { display: flex; gap: 15px; }
+    .hud-group { display: flex; gap: 10px; align-items: center; }
 
     .stat-pill {
       background: rgba(15, 23, 42, 0.8);
@@ -101,6 +110,58 @@
     
     .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
     .stat-value { font-weight: 700; color: var(--gold); font-size: 1.1rem; }
+
+    /* Bouton Trophée */
+    .btn-icon {
+      background: rgba(251, 191, 36, 0.2);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover { background: var(--gold); color: #000; }
+
+    /* --- STATS MODAL --- */
+    .modal-overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    
+    .stats-card {
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 20px;
+      border: 2px solid var(--gold);
+      width: 90%; max-width: 400px;
+      text-align: center;
+      transform: translateY(20px);
+      transition: transform 0.3s;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    }
+    .modal-overlay.open .stats-card { transform: translateY(0); }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .stat-box {
+      background: rgba(255,255,255,0.05);
+      padding: 10px; border-radius: 10px;
+    }
+    .stat-box h4 { margin: 0; color: #94a3b8; font-size: 0.8rem; }
+    .stat-box p { margin: 5px 0 0; color: #fff; font-size: 1.2rem; font-weight: bold; }
+    .stat-box.highlight p { color: var(--gold); }
 
     /* --- ZONE DE JEU --- */
     .game-board {
@@ -253,12 +314,12 @@
     .chip-reset { --c-light: #64748b; --c-dark: #334155; font-size: 1.2rem; }
     .chip-x2 { --c-light: #fbbf24; --c-dark: #d97706; color: #0f172a; border-color: #fff; }
 
-    .action-bar { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .action-bar { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
     
     .btn {
-      padding: 12px 24px; border-radius: 8px; border: none;
-      font-weight: bold; font-size: 1rem; cursor: pointer;
-      text-transform: uppercase; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-radius: 8px; border: none;
+      font-weight: bold; font-size: 0.9rem; cursor: pointer;
+      text-transform: uppercase; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
     }
     .btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none !important; }
     .btn:active { transform: translateY(2px); }
@@ -272,6 +333,8 @@
     .btn-hit { background: #22c55e; color: #fff; box-shadow: 0 4px 0 #15803d; }
     .btn-stand { background: #ef4444; color: #fff; box-shadow: 0 4px 0 #b91c1c; }
     .btn-secondary { background: #475569; color: #fff; box-shadow: 0 4px 0 #1e293b; }
+    .btn-purple { background: #8b5cf6; color: #fff; box-shadow: 0 4px 0 #5b21b6; }
+    .btn-orange { background: #f97316; color: #fff; box-shadow: 0 4px 0 #c2410c; }
 
     /* --- NOTIFICATIONS --- */
     .notification-overlay {
@@ -296,6 +359,8 @@
 </head>
 <body>
 
+<canvas id="confetti-canvas"></canvas>
+
 <div class="table-container">
   <div class="logo-watermark">BLACKJACK</div>
   <div class="table-line"></div>
@@ -313,9 +378,36 @@
       </div>
     </div>
     <div class="hud-group">
+      <button class="btn-icon" id="btnStats" title="Statistiques">🏆</button>
       <button class="btn btn-secondary" id="resetBtn" style="padding: 5px 10px; font-size: 0.7rem;">Reset</button>
     </div>
   </header>
+
+  <!-- MODAL STATS -->
+  <div id="statsModal" class="modal-overlay">
+    <div class="stats-card">
+        <h2 style="color:var(--gold); margin-bottom: 20px;">STATISTIQUES</h2>
+        <div class="stats-grid">
+            <div class="stat-box highlight">
+                <h4>MAX BANQUE</h4>
+                <p id="statMaxBank">100 €</p>
+            </div>
+            <div class="stat-box">
+                <h4>WIN STREAK</h4>
+                <p id="statStreak">0</p>
+            </div>
+            <div class="stat-box">
+                <h4>VICTOIRES</h4>
+                <p id="statWins">0</p>
+            </div>
+            <div class="stat-box">
+                <h4>PARTIES</h4>
+                <p id="statGames">0</p>
+            </div>
+        </div>
+        <button class="btn btn-secondary" id="btnCloseStats" style="width:100%">FERMER</button>
+    </div>
+  </div>
 
   <!-- BOARD -->
   <div class="game-board">
@@ -358,68 +450,54 @@
     </div>
 
     <div id="actionControls" class="action-bar" style="display:none;">
-      <button class="btn btn-hit" id="hitBtn">HIT (H)</button>
-      <button class="btn btn-stand" id="standBtn">STAND (S)</button>
+      <button class="btn btn-hit" id="hitBtn">HIT</button>
+      <button class="btn btn-stand" id="standBtn">STAND</button>
       <button class="btn btn-secondary" id="doubleBtn">DOUBLE x2</button>
-      <button class="btn btn-secondary" id="splitBtn" disabled>SPLIT</button>
+      <!-- New Buttons -->
+      <button class="btn btn-purple" id="insuranceBtn" disabled style="display:none">ASSURANCE</button>
+      <button class="btn btn-orange" id="surrenderBtn" disabled>ABANDON</button>
     </div>
     
     <div style="text-align:center; font-size: 0.7rem; color: #64748b; margin-top: 5px;">
-      Blackjack paye 3:2 • Croupier tire à 16, reste à 17
+      Blackjack paye 3:2 • Assurance 2:1 • Abandon paye 1:2
     </div>
   </aside>
 </div>
 
 <script>
-  // --- SYNTH AUDIO ENGINE (Sans fichiers externes) ---
+  // --- SYNTH AUDIO ENGINE ---
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   let audioCtx = new AudioContext();
 
   const sounds = {
     chip: () => {
-      // Bruit sec de plastique (clic aigu)
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(2500, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
-      
       gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
-      
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.05);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.05);
     },
     card: () => {
-      // Bruit blanc filtré (frottement papier)
-      const bufferSize = audioCtx.sampleRate * 0.1; // 0.1s
+      const bufferSize = audioCtx.sampleRate * 0.1; 
       const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
       const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
-      
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
       const noise = audioCtx.createBufferSource();
       noise.buffer = buffer;
       const gain = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
-      
-      filter.type = 'lowpass';
-      filter.frequency.value = 1200;
-      
+      filter.type = 'lowpass'; filter.frequency.value = 1200;
       gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-      
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(audioCtx.destination);
+      noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
       noise.start();
     },
     win: () => {
-      // Arpège majeur
       [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
           setTimeout(() => {
               const osc = audioCtx.createOscillator();
@@ -430,13 +508,11 @@
               osc.frequency.value = freq;
               gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
               gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.4);
+              osc.start(); osc.stop(audioCtx.currentTime + 0.4);
           }, i * 80);
       });
     },
     lose: () => {
-      // Ton descendant
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.connect(gain);
@@ -446,8 +522,7 @@
       osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.4);
       gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
       gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.4);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.4);
     }
   };
 
@@ -456,6 +531,64 @@
       if(sounds[type]) sounds[type]();
   };
 
+  // --- PARTICLE ENGINE (Confetti) ---
+  class Particle {
+    constructor(x, y) {
+      this.x = x; this.y = y;
+      this.size = Math.random() * 8 + 4;
+      this.speedX = Math.random() * 6 - 3;
+      this.speedY = Math.random() * -6 - 2;
+      this.color = `hsl(${Math.random() * 50 + 40}, 100%, 50%)`; 
+      this.gravity = 0.15;
+      this.life = 100;
+      this.rotation = Math.random() * 360;
+      this.rotationSpeed = Math.random() * 10 - 5;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      this.speedY += this.gravity;
+      this.life--;
+      this.rotation += this.rotationSpeed;
+    }
+    draw(ctx) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation * Math.PI / 180);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+      ctx.restore();
+    }
+  }
+
+  const canvas = document.getElementById('confetti-canvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  
+  const resizeCanvas = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  };
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  const spawnConfetti = () => {
+    for(let i=0; i<100; i++) {
+        particles.push(new Particle(window.innerWidth/2, window.innerHeight/2));
+    }
+  };
+
+  const animateParticles = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach((p, index) => {
+        p.update();
+        p.draw(ctx);
+        if(p.life <= 0) particles.splice(index, 1);
+    });
+    requestAnimationFrame(animateParticles);
+  };
+  animateParticles();
+
   // --- STATE ---
   let bank = parseFloat(localStorage.getItem('bj_bank')) || 100;
   let currentBet = 0;
@@ -463,6 +596,13 @@
   let dealerHand = [];
   let playerHand = [];
   let gameActive = false;
+  let insuranceBet = 0; // State for insurance
+  
+  // Stats
+  let stats = JSON.parse(localStorage.getItem('bj_stats')) || {
+      maxBank: 100, streak: 0, wins: 0, games: 0
+  };
+  let currentStreak = 0;
 
   // --- DOM ---
   const els = {
@@ -477,16 +617,27 @@
     notif: document.getElementById('notification'),
     notifTitle: document.getElementById('notifTitle'),
     notifMsg: document.getElementById('notifMessage'),
+    modal: document.getElementById('statsModal'),
     btns: {
       deal: document.getElementById('dealBtn'),
       hit: document.getElementById('hitBtn'),
       stand: document.getElementById('standBtn'),
       double: document.getElementById('doubleBtn'),
       split: document.getElementById('splitBtn'),
+      insurance: document.getElementById('insuranceBtn'), // New
+      surrender: document.getElementById('surrenderBtn'), // New
       chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
       resetBet: document.getElementById('btnBetReset'),
       doubleBet: document.getElementById('btnBetDouble'),
-      reset: document.getElementById('resetBtn')
+      reset: document.getElementById('resetBtn'),
+      stats: document.getElementById('btnStats'),
+      closeStats: document.getElementById('btnCloseStats')
+    },
+    stats: {
+        max: document.getElementById('statMaxBank'),
+        streak: document.getElementById('statStreak'),
+        wins: document.getElementById('statWins'),
+        games: document.getElementById('statGames')
     }
   };
 
@@ -523,6 +674,12 @@
     localStorage.setItem('bj_bank', bank);
   };
 
+  const saveStats = () => {
+      if(bank > stats.maxBank) stats.maxBank = bank;
+      if(currentStreak > stats.streak) stats.streak = currentStreak;
+      localStorage.setItem('bj_stats', JSON.stringify(stats));
+  }
+
   const calculateScore = (hand) => {
     let sum = 0; let aces = 0;
     hand.forEach(c => { sum += c.value; if(c.rank === 'A') aces++; });
@@ -547,7 +704,7 @@
       
       scoreEl.textContent = score;
       scoreEl.classList.remove('score-pop');
-      void scoreEl.offsetWidth; // Force reflow
+      void scoreEl.offsetWidth; 
       scoreEl.classList.add('score-pop');
   };
 
@@ -578,7 +735,7 @@
         const delay = index * 200; 
         cardEl = createCardElement(card, isHidden, delay);
         container.appendChild(cardEl);
-        playSound('card'); // SON CARTE
+        playSound('card'); 
         setTimeout(() => {
           updatePartialScore(hand, index, scoreEl, isDealerHand, revealDealer);
         }, delay + 300);
@@ -589,7 +746,7 @@
         cardEl.classList.add('flipping');
         cardEl.style.animationDelay = '0ms';
         fillCardContent(cardEl, card);
-        playSound('card'); // SON CARTE (flip)
+        playSound('card'); 
         setTimeout(() => {
            scoreEl.textContent = calculateScore(hand); 
         }, 200);
@@ -605,13 +762,14 @@
   // --- ACTIONS ---
 
   const startRound = () => {
-    if(audioCtx.state === 'suspended') audioCtx.resume(); // Active le son au premier clic
+    if(audioCtx.state === 'suspended') audioCtx.resume(); 
     if(currentBet === 0) {
       showNotification('Mise Manquante', 'Placez une mise !', 'error');
       return;
     }
 
     gameActive = true;
+    insuranceBet = 0; // Reset insurance
     deck = shuffle(createDeck());
     playerHand = [deck.pop(), deck.pop()];
     dealerHand = [deck.pop(), deck.pop()];
@@ -624,8 +782,23 @@
     els.playerCards.innerHTML = '';
     els.playerScore.textContent = '0';
     els.dealerScore.textContent = '0';
+    
+    // Reset buttons state
+    els.btns.surrender.disabled = false; // Enabled at start
+    els.btns.insurance.style.display = 'none'; // Hidden by default
+    els.btns.insurance.disabled = true;
 
     renderBoard(false);
+
+    // Check for Insurance opportunity (Dealer shows Ace)
+    // Note: Dealer card 0 is hidden, card 1 is visible in this logic
+    setTimeout(() => {
+        if(dealerHand[1].rank === 'A' && bank >= currentBet/2) {
+             els.btns.insurance.style.display = 'flex';
+             els.btns.insurance.disabled = false;
+             showNotification("ASSURANCE ?", "Le croupier a un As", "neutral");
+        }
+    }, 800);
 
     if(calculateScore(playerHand) === 21) {
       setTimeout(() => endRound(), 1800);
@@ -634,6 +807,8 @@
   };
 
   const hit = () => {
+    els.btns.surrender.disabled = true; // Can't surrender after hitting
+    els.btns.insurance.disabled = true; // Can't insure after hitting
     const card = deck.pop();
     playerHand.push(card);
     renderBoard(false);
@@ -646,6 +821,8 @@
     els.btns.hit.disabled = true;
     els.btns.stand.disabled = true;
     els.btns.double.disabled = true;
+    els.btns.surrender.disabled = true;
+    els.btns.insurance.disabled = true;
     dealerPlay();
   };
 
@@ -662,6 +839,39 @@
         else stand();
       }, 1000);
     }
+  };
+  
+  const takeInsurance = () => {
+      const cost = currentBet / 2;
+      if(bank >= cost) {
+          bank -= cost;
+          insuranceBet = cost;
+          updateHUD();
+          playSound('chip');
+          els.btns.insurance.disabled = true;
+          els.btns.insurance.innerText = "ASSURÉ";
+      }
+  };
+
+  const surrender = () => {
+      gameActive = false;
+      bank += (currentBet / 2); // Return half
+      updateHUD();
+      playSound('lose');
+      showNotification("ABANDON", "Demi-mise récupérée", "neutral");
+      
+      // End immediately
+      renderBoard(true); // Reveal cards just to show
+      setTimeout(() => {
+          els.actionControls.style.display = 'none';
+          els.bettingControls.style.display = 'block';
+          // Reset UI
+          els.btns.hit.disabled = false;
+          els.btns.stand.disabled = false;
+          els.btns.insurance.innerText = "ASSURANCE";
+          currentBet = 0; 
+          updateHUD();
+      }, 2000);
   };
 
   const dealerPlay = async () => {
@@ -685,40 +895,64 @@
     gameActive = false;
     const pScore = calculateScore(playerHand);
     const dScore = calculateScore(dealerHand);
+    const dealerHasBJ = (dScore === 21 && dealerHand.length === 2);
+    
     let winAmount = 0; let title = ""; let msg = ""; let type = "neutral";
 
     renderBoard(true); 
 
     setTimeout(() => {
+        stats.games++;
+        
+        // --- LOGIC ASSURANCE ---
+        if(insuranceBet > 0) {
+            if(dealerHasBJ) {
+                // Win Insurance (2:1) -> Bet 10, Ins 5. Win 15.
+                bank += (insuranceBet * 3); // Return insurance + profit
+                msg = "Assurance Payée ! ";
+            } else {
+                msg = "Assurance Perdue. ";
+            }
+        }
+
         if (pScore > 21) {
-          title = "BUST !"; msg = `Perdu ${currentBet} €`; type = "lose";
+          title = "BUST !"; msg += `Perdu ${currentBet} €`; type = "lose";
+          currentStreak = 0;
         } else if (dScore > 21) {
-          title = "GAGNÉ !"; msg = `Le croupier saute (+${currentBet} €)`; winAmount = currentBet * 2; type = "win";
+          title = "GAGNÉ !"; msg += `Dealer saute (+${currentBet} €)`; winAmount = currentBet * 2; type = "win";
         } else if (pScore > dScore) {
           if(pScore === 21 && playerHand.length === 2) {
-             title = "BLACKJACK !"; winAmount = currentBet + (currentBet * 1.5); msg = `Royal ! (+${winAmount - currentBet} €)`; type = "win";
+             title = "BLACKJACK !"; winAmount = currentBet + (currentBet * 1.5); msg += `Royal ! (+${winAmount - currentBet} €)`; type = "win";
           } else {
-             title = "GAGNÉ !"; winAmount = currentBet * 2; msg = `Score ${pScore} vs ${dScore}`; type = "win";
+             title = "GAGNÉ !"; winAmount = currentBet * 2; msg += `${pScore} vs ${dScore}`; type = "win";
           }
         } else if (pScore < dScore) {
-          title = "PERDU..."; msg = `Le croupier a ${dScore}`; type = "lose";
+          title = "PERDU..."; msg += `Dealer a ${dScore}`; type = "lose";
+          currentStreak = 0;
         } else {
-          title = "ÉGALITÉ"; msg = "Mise rendue"; winAmount = currentBet; type = "push";
+          title = "ÉGALITÉ"; msg += "Mise rendue"; winAmount = currentBet; type = "push";
+        }
+
+        if(type === 'win') {
+            stats.wins++;
+            currentStreak++;
+            playSound('win');
+            spawnConfetti(); 
+        } else if(type === 'lose') {
+            playSound('lose');
         }
 
         bank += winAmount;
+        saveStats();
         updateHUD();
         showNotification(title, msg, type);
         
-        // JOUER LE SON DE FIN
-        if(type === 'win') playSound('win'); 
-        else if(type === 'lose') playSound('lose');
-
         setTimeout(() => {
           els.actionControls.style.display = 'none';
           els.bettingControls.style.display = 'block';
           els.btns.hit.disabled = false;
           els.btns.stand.disabled = false;
+          els.btns.insurance.innerText = "ASSURANCE"; // Reset text
           currentBet = 0; 
           updateHUD();
         }, 3000);
@@ -738,9 +972,7 @@
   // --- EVENTS ---
   els.btns.chips.forEach(btn => {
     btn.addEventListener('click', () => {
-      // Démarrer audio si nécessaire
       if(audioCtx.state === 'suspended') audioCtx.resume();
-      
       const val = parseInt(btn.dataset.val);
       if(bank >= val) {
         bank -= val; currentBet += val;
@@ -772,13 +1004,35 @@
     }
   });
 
+  // Modal Stats
+  const updateStatsUI = () => {
+      els.stats.max.innerText = stats.maxBank + ' €';
+      els.stats.streak.innerText = stats.streak;
+      els.stats.wins.innerText = stats.wins;
+      els.stats.games.innerText = stats.games;
+  };
+  els.btns.stats.addEventListener('click', () => {
+      updateStatsUI();
+      els.modal.classList.add('open');
+  });
+  els.btns.closeStats.addEventListener('click', () => {
+      els.modal.classList.remove('open');
+  });
+
   els.btns.deal.addEventListener('click', startRound);
   els.btns.hit.addEventListener('click', hit);
   els.btns.stand.addEventListener('click', stand);
   els.btns.double.addEventListener('click', double);
+  els.btns.surrender.addEventListener('click', surrender);
+  els.btns.insurance.addEventListener('click', takeInsurance);
+  
   els.btns.reset.addEventListener('click', () => {
     if(confirm('Reset argent à 100€ ?')) {
-      bank = 100; currentBet = 0; updateHUD(); location.reload();
+      bank = 100; currentBet = 0; 
+      stats = { maxBank: 100, streak: 0, wins: 0, games: 0 };
+      currentStreak = 0;
+      saveStats();
+      updateHUD(); location.reload();
     }
   });
 
