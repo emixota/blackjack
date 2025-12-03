@@ -163,6 +163,10 @@
     .stat-box p { margin: 5px 0 0; color: #fff; font-size: 1.2rem; font-weight: bold; }
     .stat-box.highlight p { color: var(--gold); }
 
+    .stats-actions {
+        display: flex; gap: 10px; margin-top: 20px;
+    }
+
     /* --- ZONE DE JEU --- */
     .game-board {
       flex: 1;
@@ -335,6 +339,8 @@
     .btn-secondary { background: #475569; color: #fff; box-shadow: 0 4px 0 #1e293b; }
     .btn-purple { background: #8b5cf6; color: #fff; box-shadow: 0 4px 0 #5b21b6; }
     .btn-orange { background: #f97316; color: #fff; box-shadow: 0 4px 0 #c2410c; }
+    .btn-danger-outline { background: transparent; border: 2px solid var(--danger); color: var(--danger); width: 100%; justify-content: center; }
+    .btn-danger-outline:hover { background: var(--danger); color: #fff; }
 
     /* --- NOTIFICATIONS --- */
     .notification-overlay {
@@ -405,7 +411,10 @@
                 <p id="statGames">0</p>
             </div>
         </div>
-        <button class="btn btn-secondary" id="btnCloseStats" style="width:100%">FERMER</button>
+        <div class="stats-actions">
+            <button class="btn btn-danger-outline" id="btnResetStats">EFFACER STATS</button>
+            <button class="btn btn-secondary" id="btnCloseStats" style="width:100%">FERMER</button>
+        </div>
     </div>
   </div>
 
@@ -453,7 +462,6 @@
       <button class="btn btn-hit" id="hitBtn">HIT</button>
       <button class="btn btn-stand" id="standBtn">STAND</button>
       <button class="btn btn-secondary" id="doubleBtn">DOUBLE x2</button>
-      <!-- New Buttons -->
       <button class="btn btn-purple" id="insuranceBtn" disabled style="display:none">ASSURANCE</button>
       <button class="btn btn-orange" id="surrenderBtn" disabled>ABANDON</button>
     </div>
@@ -531,7 +539,7 @@
       if(sounds[type]) sounds[type]();
   };
 
-  // --- PARTICLE ENGINE (Confetti) ---
+  // --- PARTICLE ENGINE ---
   class Particle {
     constructor(x, y) {
       this.x = x; this.y = y;
@@ -596,11 +604,11 @@
   let dealerHand = [];
   let playerHand = [];
   let gameActive = false;
-  let insuranceBet = 0; // State for insurance
+  let insuranceBet = 0; 
   
   // Stats
   let stats = JSON.parse(localStorage.getItem('bj_stats')) || {
-      maxBank: 100, streak: 0, wins: 0, games: 0
+      maxBank: bank, streak: 0, wins: 0, games: 0
   };
   let currentStreak = 0;
 
@@ -624,14 +632,15 @@
       stand: document.getElementById('standBtn'),
       double: document.getElementById('doubleBtn'),
       split: document.getElementById('splitBtn'),
-      insurance: document.getElementById('insuranceBtn'), // New
-      surrender: document.getElementById('surrenderBtn'), // New
+      insurance: document.getElementById('insuranceBtn'), 
+      surrender: document.getElementById('surrenderBtn'), 
       chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
       resetBet: document.getElementById('btnBetReset'),
       doubleBet: document.getElementById('btnBetDouble'),
       reset: document.getElementById('resetBtn'),
       stats: document.getElementById('btnStats'),
-      closeStats: document.getElementById('btnCloseStats')
+      closeStats: document.getElementById('btnCloseStats'),
+      resetStats: document.getElementById('btnResetStats')
     },
     stats: {
         max: document.getElementById('statMaxBank'),
@@ -769,7 +778,7 @@
     }
 
     gameActive = true;
-    insuranceBet = 0; // Reset insurance
+    insuranceBet = 0; 
     deck = shuffle(createDeck());
     playerHand = [deck.pop(), deck.pop()];
     dealerHand = [deck.pop(), deck.pop()];
@@ -784,14 +793,13 @@
     els.dealerScore.textContent = '0';
     
     // Reset buttons state
-    els.btns.surrender.disabled = false; // Enabled at start
-    els.btns.insurance.style.display = 'none'; // Hidden by default
+    els.btns.surrender.disabled = false; 
+    els.btns.insurance.style.display = 'none'; 
     els.btns.insurance.disabled = true;
 
     renderBoard(false);
 
-    // Check for Insurance opportunity (Dealer shows Ace)
-    // Note: Dealer card 0 is hidden, card 1 is visible in this logic
+    // Check for Insurance
     setTimeout(() => {
         if(dealerHand[1].rank === 'A' && bank >= currentBet/2) {
              els.btns.insurance.style.display = 'flex';
@@ -807,8 +815,8 @@
   };
 
   const hit = () => {
-    els.btns.surrender.disabled = true; // Can't surrender after hitting
-    els.btns.insurance.disabled = true; // Can't insure after hitting
+    els.btns.surrender.disabled = true; 
+    els.btns.insurance.disabled = true; 
     const card = deck.pop();
     playerHand.push(card);
     renderBoard(false);
@@ -854,18 +862,17 @@
   };
 
   const surrender = () => {
+      if(!confirm("Êtes-vous sûr de vouloir abandonner ? Vous récupérerez la moitié de votre mise.")) return;
       gameActive = false;
-      bank += (currentBet / 2); // Return half
+      bank += (currentBet / 2); 
       updateHUD();
       playSound('lose');
       showNotification("ABANDON", "Demi-mise récupérée", "neutral");
       
-      // End immediately
-      renderBoard(true); // Reveal cards just to show
+      renderBoard(true); 
       setTimeout(() => {
           els.actionControls.style.display = 'none';
           els.bettingControls.style.display = 'block';
-          // Reset UI
           els.btns.hit.disabled = false;
           els.btns.stand.disabled = false;
           els.btns.insurance.innerText = "ASSURANCE";
@@ -904,11 +911,9 @@
     setTimeout(() => {
         stats.games++;
         
-        // --- LOGIC ASSURANCE ---
         if(insuranceBet > 0) {
             if(dealerHasBJ) {
-                // Win Insurance (2:1) -> Bet 10, Ins 5. Win 15.
-                bank += (insuranceBet * 3); // Return insurance + profit
+                bank += (insuranceBet * 3); 
                 msg = "Assurance Payée ! ";
             } else {
                 msg = "Assurance Perdue. ";
@@ -952,7 +957,7 @@
           els.bettingControls.style.display = 'block';
           els.btns.hit.disabled = false;
           els.btns.stand.disabled = false;
-          els.btns.insurance.innerText = "ASSURANCE"; // Reset text
+          els.btns.insurance.innerText = "ASSURANCE"; 
           currentBet = 0; 
           updateHUD();
         }, 3000);
@@ -1018,6 +1023,14 @@
   els.btns.closeStats.addEventListener('click', () => {
       els.modal.classList.remove('open');
   });
+  els.btns.resetStats.addEventListener('click', () => {
+      if(confirm('Êtes-vous sûr de vouloir remettre les statistiques à zéro ?')) {
+          stats = { maxBank: bank, streak: 0, wins: 0, games: 0 };
+          currentStreak = 0;
+          saveStats();
+          updateStatsUI();
+      }
+  });
 
   els.btns.deal.addEventListener('click', startRound);
   els.btns.hit.addEventListener('click', hit);
@@ -1027,12 +1040,15 @@
   els.btns.insurance.addEventListener('click', takeInsurance);
   
   els.btns.reset.addEventListener('click', () => {
-    if(confirm('Reset argent à 100€ ?')) {
-      bank = 100; currentBet = 0; 
-      stats = { maxBank: 100, streak: 0, wins: 0, games: 0 };
-      currentStreak = 0;
-      saveStats();
-      updateHUD(); location.reload();
+    if(confirm('Réinitialiser le solde ?')) {
+        let amount = prompt("Entrez le montant de départ :", "100");
+        if(amount && !isNaN(amount) && amount > 0) {
+            bank = parseFloat(amount);
+            currentBet = 0;
+            saveStats(); // Saves stats but updates maxBank if new bank is higher
+            updateHUD(); 
+            location.reload();
+        }
     }
   });
 
