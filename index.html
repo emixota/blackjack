@@ -226,7 +226,6 @@
       flex-wrap: wrap;
     }
 
-    /* Nouveau bouton Deal centré */
     .deal-container {
       display: flex;
       justify-content: center;
@@ -250,11 +249,7 @@
     .chip-50 { --c-light: #22c55e; --c-dark: #14532d; }
     .chip-100 { --c-light: #000000; --c-dark: #333333; border-color: var(--gold); }
     
-    /* Boutons spéciaux (Reset et x2) */
-    .chip-special {
-        border-style: solid;
-        border-color: rgba(255,255,255,0.2);
-    }
+    .chip-special { border-style: solid; border-color: rgba(255,255,255,0.2); }
     .chip-reset { --c-light: #64748b; --c-dark: #334155; font-size: 1.2rem; }
     .chip-x2 { --c-light: #fbbf24; --c-dark: #d97706; color: #0f172a; border-color: #fff; }
 
@@ -270,13 +265,9 @@
     
     .btn-deal { 
         background: linear-gradient(to bottom, #fbbf24, #d97706); 
-        color: #0f172a; 
-        box-shadow: 0 4px 0 #92400e; 
-        width: 100%; 
-        max-width: 400px; 
-        justify-content: center;
-        font-size: 1.1rem;
-        padding: 14px;
+        color: #0f172a; box-shadow: 0 4px 0 #92400e; 
+        width: 100%; max-width: 400px; justify-content: center;
+        font-size: 1.1rem; padding: 14px;
     }
     .btn-hit { background: #22c55e; color: #fff; box-shadow: 0 4px 0 #15803d; }
     .btn-stand { background: #ef4444; color: #fff; box-shadow: 0 4px 0 #b91c1c; }
@@ -328,8 +319,6 @@
 
   <!-- BOARD -->
   <div class="game-board">
-    
-    <!-- Dealer Zone -->
     <div class="hand-zone dealer-zone">
       <div class="zone-label">
         <span>CROUPIER</span>
@@ -338,13 +327,11 @@
       <div class="cards-container" id="dealerCards"></div>
     </div>
 
-    <!-- Notification Area -->
     <div id="notification" class="notification-overlay">
       <h2 id="notifTitle">WIN!</h2>
       <p id="notifMessage">+20 €</p>
     </div>
 
-    <!-- Player Zone -->
     <div class="hand-zone player-zone">
       <div class="zone-label">
         <span>JOUEUR</span>
@@ -356,19 +343,13 @@
 
   <!-- CONTROLS -->
   <aside class="controls-area">
-    
-    <!-- Betting Phase -->
     <div id="bettingControls">
         <div class="chips-rack">
-            <!-- Bouton Reset (Poubelle) -->
             <button class="chip-btn chip-reset chip-special" id="btnBetReset" title="Tout enlever">🗑️</button>
-            
             <button class="chip-btn chip-5" data-val="5">5</button>
             <button class="chip-btn chip-10" data-val="10">10</button>
             <button class="chip-btn chip-50" data-val="50">50</button>
             <button class="chip-btn chip-100" data-val="100">100</button>
-            
-            <!-- Bouton x2 -->
             <button class="chip-btn chip-x2 chip-special" id="btnBetDouble" title="Doubler la mise">x2</button>
         </div>
         <div class="deal-container">
@@ -376,7 +357,6 @@
         </div>
     </div>
 
-    <!-- Action Phase -->
     <div id="actionControls" class="action-bar" style="display:none;">
       <button class="btn btn-hit" id="hitBtn">HIT (H)</button>
       <button class="btn btn-stand" id="standBtn">STAND (S)</button>
@@ -390,13 +370,92 @@
   </aside>
 </div>
 
-<!-- Audio Elements -->
-<audio id="sndCard" src="card.mp3"></audio>
-<audio id="sndWin" src="win.mp3"></audio>
-<audio id="sndLose" src="perdu.mp3"></audio>
-<audio id="sndChip" src="chip.mp3"></audio>
-
 <script>
+  // --- SYNTH AUDIO ENGINE (Sans fichiers externes) ---
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = new AudioContext();
+
+  const sounds = {
+    chip: () => {
+      // Bruit sec de plastique (clic aigu)
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(2500, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+      
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.05);
+    },
+    card: () => {
+      // Bruit blanc filtré (frottement papier)
+      const bufferSize = audioCtx.sampleRate * 0.1; // 0.1s
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      
+      filter.type = 'lowpass';
+      filter.frequency.value = 1200;
+      
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start();
+    },
+    win: () => {
+      // Arpège majeur
+      [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          setTimeout(() => {
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.type = 'triangle';
+              osc.frequency.value = freq;
+              gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+              osc.start();
+              osc.stop(audioCtx.currentTime + 0.4);
+          }, i * 80);
+      });
+    },
+    lose: () => {
+      // Ton descendant
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    }
+  };
+
+  const playSound = (type) => {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      if(sounds[type]) sounds[type]();
+  };
+
   // --- STATE ---
   let bank = parseFloat(localStorage.getItem('bj_bank')) || 100;
   let currentBet = 0;
@@ -424,16 +483,11 @@
       stand: document.getElementById('standBtn'),
       double: document.getElementById('doubleBtn'),
       split: document.getElementById('splitBtn'),
-      chips: document.querySelectorAll('.chip-btn:not(.chip-special)'), // Select only value chips
+      chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
       resetBet: document.getElementById('btnBetReset'),
       doubleBet: document.getElementById('btnBetDouble'),
       reset: document.getElementById('resetBtn')
     }
-  };
-
-  const playSound = (id) => {
-    const el = document.getElementById(id);
-    if(el) { el.currentTime = 0; el.play().catch(e => {}); }
   };
 
   // --- LOGIC ---
@@ -524,7 +578,7 @@
         const delay = index * 200; 
         cardEl = createCardElement(card, isHidden, delay);
         container.appendChild(cardEl);
-        playSound('sndCard');
+        playSound('card'); // SON CARTE
         setTimeout(() => {
           updatePartialScore(hand, index, scoreEl, isDealerHand, revealDealer);
         }, delay + 300);
@@ -535,6 +589,7 @@
         cardEl.classList.add('flipping');
         cardEl.style.animationDelay = '0ms';
         fillCardContent(cardEl, card);
+        playSound('card'); // SON CARTE (flip)
         setTimeout(() => {
            scoreEl.textContent = calculateScore(hand); 
         }, 200);
@@ -550,6 +605,7 @@
   // --- ACTIONS ---
 
   const startRound = () => {
+    if(audioCtx.state === 'suspended') audioCtx.resume(); // Active le son au premier clic
     if(currentBet === 0) {
       showNotification('Mise Manquante', 'Placez une mise !', 'error');
       return;
@@ -598,6 +654,7 @@
       bank -= currentBet;
       currentBet *= 2;
       updateHUD();
+      playSound('chip');
       playerHand.push(deck.pop());
       renderBoard(false);
       setTimeout(() => {
@@ -652,11 +709,14 @@
         bank += winAmount;
         updateHUD();
         showNotification(title, msg, type);
-        if(type === 'win') playSound('sndWin'); else if(type === 'lose') playSound('sndLose');
+        
+        // JOUER LE SON DE FIN
+        if(type === 'win') playSound('win'); 
+        else if(type === 'lose') playSound('lose');
 
         setTimeout(() => {
           els.actionControls.style.display = 'none';
-          els.bettingControls.style.display = 'block'; // Remise en block pour le conteneur betting
+          els.bettingControls.style.display = 'block';
           els.btns.hit.disabled = false;
           els.btns.stand.disabled = false;
           currentBet = 0; 
@@ -678,34 +738,35 @@
   // --- EVENTS ---
   els.btns.chips.forEach(btn => {
     btn.addEventListener('click', () => {
+      // Démarrer audio si nécessaire
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      
       const val = parseInt(btn.dataset.val);
       if(bank >= val) {
         bank -= val; currentBet += val;
-        updateHUD(); playSound('sndChip');
+        updateHUD(); playSound('chip');
         btn.style.transform = "scale(0.8)";
         setTimeout(() => btn.style.transform = "scale(1)", 100);
       } else { showNotification("Fonds insuffisants", "Il faut recharger !", "error"); }
     });
   });
 
-  // Reset Bet (La Poubelle)
   els.btns.resetBet.addEventListener('click', () => {
     if(currentBet > 0) {
         bank += currentBet;
         currentBet = 0;
         updateHUD();
-        playSound('sndChip'); // Ou un son différent si tu as
+        playSound('chip');
     }
   });
 
-  // x2 Bet (Phase de mise)
   els.btns.doubleBet.addEventListener('click', () => {
     if(currentBet === 0) return;
     if(bank >= currentBet) {
         bank -= currentBet;
         currentBet *= 2;
         updateHUD();
-        playSound('sndChip');
+        playSound('chip');
     } else {
         showNotification("Pas assez d'argent", "Impossible de doubler", "error");
     }
