@@ -348,6 +348,9 @@
     .chip-special { border-style: solid; border-color: rgba(255,255,255,0.2); }
     .chip-reset { --c-light: #64748b; --c-dark: #334155; font-size: 1.2rem; }
     .chip-x2 { --c-light: #fbbf24; --c-dark: #d97706; color: #0f172a; border-color: #fff; }
+    /* Nouveaux jetons */
+    .chip-allin { --c-light: #f59e0b; --c-dark: #b45309; color: #fff; font-size: 0.7rem; border-color: #fcd34d; }
+    .chip-custom { --c-light: #6366f1; --c-dark: #4338ca; font-size: 1rem; }
 
     .action-bar { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
     
@@ -486,6 +489,9 @@
             <button class="chip-btn chip-50" data-val="50">50</button>
             <button class="chip-btn chip-100" data-val="100">100</button>
             <button class="chip-btn chip-x2 chip-special" id="btnBetDouble" title="Doubler la mise">x2</button>
+            <!-- NOUVEAUX BOUTONS -->
+            <button class="chip-btn chip-allin chip-special" id="btnBetAllIn" title="Miser tout">ALL</button>
+            <button class="chip-btn chip-custom chip-special" id="btnBetCustom" title="Montant précis">?</button>
         </div>
         <div class="deal-container">
             <button class="btn btn-deal" id="dealBtn">DISTRIBUER</button>
@@ -621,7 +627,7 @@
 
   // --- STATE ---
   let bank = parseFloat(localStorage.getItem('bj_bank')) || 100;
-  let currentBet = 0; 
+  let currentBet = 0; // Mise initiale par main
   let deck = [];
   let dealerHand = [];
   let playerHands = []; 
@@ -661,6 +667,8 @@
       chips: document.querySelectorAll('.chip-btn:not(.chip-special)'),
       resetBet: document.getElementById('btnBetReset'),
       doubleBet: document.getElementById('btnBetDouble'),
+      allIn: document.getElementById('btnBetAllIn'), // New
+      custom: document.getElementById('btnBetCustom'), // New
       reset: document.getElementById('resetBtn'),
       stats: document.getElementById('btnStats'),
       closeStats: document.getElementById('btnCloseStats'),
@@ -1045,6 +1053,37 @@
         setTimeout(() => btn.style.transform = "scale(1)", 100);
       } else { showNotification("Fonds insuffisants", "Il faut recharger !", "error"); }
     });
+  });
+
+  els.btns.allIn.addEventListener('click', () => {
+      if(isProcessing || turnPhase !== 'betting') return;
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      if(bank > 0) {
+          currentBet += bank;
+          bank = 0;
+          updateHUD();
+          playSound('chip');
+      } else {
+          showNotification("Banque vide", "Rien à miser !", "error");
+      }
+  });
+
+  els.btns.custom.addEventListener('click', () => {
+      if(isProcessing || turnPhase !== 'betting') return;
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const amountStr = prompt("Montant à ajouter à la mise ?", "10");
+      if(!amountStr) return;
+      const amount = parseInt(amountStr);
+      if(!isNaN(amount) && amount > 0) {
+          if(bank >= amount) {
+              bank -= amount;
+              currentBet += amount;
+              updateHUD();
+              playSound('chip');
+          } else {
+              showNotification("Fonds insuffisants", "", "error");
+          }
+      }
   });
 
   els.btns.resetBet.addEventListener('click', () => {
